@@ -13,7 +13,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
-from .organisation import SubscriptionTier
+from .organization import SubscriptionTier
 
 if TYPE_CHECKING:
     from .resume_versions import ResumeVersion

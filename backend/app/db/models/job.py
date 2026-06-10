@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .billing import TokenUsageLog
     from .pipeline import PipelineChannel
     from .scenario import ScenarioQuestion
-    from .organisation import Organization
+    from .organization import Organization
 
 
 import enum

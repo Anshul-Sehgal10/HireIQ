@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base import Base, UUIDMixin
 
 if TYPE_CHECKING:
-    from .organisation import Organization
+    from .organization import Organization
     from .user import User
 
 

@@ -37,7 +37,7 @@ class AuditLog(UUIDMixin, Base):
     - actor_id may be NULL for system-generated actions.
     - resource_type + resource_id identify the affected entity (e.g.
       resource_type="application", resource_id=<uuid>).
-    - metadata is a JSONB blob for action-specific context (e.g. old/new status
+    - meta_data is a JSONB blob for action-specific context (e.g. old/new status
       for a status transition, IP address for a login event).
     - Used for compliance (who did what, when) and debugging.
     """
@@ -54,7 +54,7 @@ class AuditLog(UUIDMixin, Base):
     resource_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
-    metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    meta_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
