@@ -2,23 +2,32 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 import uuid
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Initialize the Argon2id hasher with secure, production-grade defaults
+ph = PasswordHasher()
 
 """
-What's happening here: passlib hashes passwords with bcrypt (never store plain text). The JWT has type: access or type: refresh so a refresh token can never be used as an access token — a common security mistake. The jti field in the refresh token gives it a unique ID so you can invalidate individual sessions later.
-
+What's happening here: argon2-cffi hashes passwords with Argon2id (modern, memory-hard standard). 
+The JWT has type: access or type: refresh so a refresh token can never be used as an access 
+token — a common security mistake. The jti field in the refresh token gives it a unique ID 
+so you can invalidate individual sessions later.
 """
 
 def hash_password(password: str) -> str:
-    return pwd_context.hash(password)
+    """Hashes a plain-text password using Argon2id."""
+    return ph.hash(password)
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verifies a plain-text password against an Argon2id hash."""
+    try:
+        return ph.verify(hashed, plain)
+    except VerifyMismatchError:
+        return False
 
 def create_access_token(user_id: str, role: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
@@ -43,4 +52,8 @@ def create_refresh_token(user_id: str) -> str:
 
 def decode_token(token: str) -> dict:
     """Raises JWTError if invalid or expired."""
-    return jwt.decode(token, settings.JWT_SECRET_KEY.get_secret_value(), algorithms=[settings.JWT_ALGORITHM])
+    return jwt.decode(
+        token, 
+        settings.JWT_SECRET_KEY.get_secret_value(), 
+        algorithms=[settings.JWT_ALGORITHM]
+    )
