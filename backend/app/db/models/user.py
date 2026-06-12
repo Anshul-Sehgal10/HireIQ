@@ -53,12 +53,21 @@ class User(UUIDMixin, TimestampMixin, Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
     role: Mapped[UserRole] = mapped_column(
-        Enum(UserRole, name="user_role_enum"), nullable=False
+        Enum(
+            UserRole,
+            name="user_role_enum",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
+        nullable=False,
     )
 
     # OAuth
     oauth_provider: Mapped[OAuthProvider] = mapped_column(
-        Enum(OAuthProvider, name="oauth_provider_enum"),
+        Enum(
+            OAuthProvider,
+            name="oauth_provider_enum",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=OAuthProvider.LOCAL,
         server_default=OAuthProvider.LOCAL.value,
