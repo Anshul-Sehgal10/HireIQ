@@ -186,7 +186,7 @@ async def oauth_callback(
         await client.fetch_token(conf["token_url"], code=code)
 
         # --- Fetch user profile ---
-        resp = await client.get(conf["userinfo_url"])
+        resp = await client.get(conf["userinfo_url"]) # type: ignore
         resp.raise_for_status()
         profile = resp.json()
 

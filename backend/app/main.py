@@ -61,7 +61,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        settings.FRONTEND_URL,        # e.g. http://localhost:3000
+        settings.FRONTEND_URL,        # e.g. http://localhost:3000      # type: ignore
         "http://localhost:3000",       # always allow local dev
     ],
     allow_credentials=True,           # needed for cookies / auth headers

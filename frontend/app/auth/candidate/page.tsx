@@ -7,10 +7,31 @@ export default function LoginPage() {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    console.log("Logging in with:", { email, password });
-    // Add your auth submission logic here
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: 'Login failed' }));
+        console.error('Login error:', err);
+        alert(err.message || 'Login failed');
+        return;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      console.log('Login success:', data);
+      // redirect or handle success as needed
+      alert('Signed in successfully');
+    } catch (error) {
+      console.error('Request error:', error);
+      alert('An error occurred. Please try again.');
+    }
   };
 
   return (
