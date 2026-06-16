@@ -29,12 +29,19 @@ def verify_password(plain: str, hashed: str) -> bool:
     except VerifyMismatchError:
         return False
 
-def create_access_token(user_id: str, role: str) -> str:
+def create_access_token(user_id: str, role: str, user_data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     return jwt.encode(
-        {"sub": user_id, "role": role, "exp": expire, "type": "access"},
+        {
+            "sub": user_id,
+            "role": role,
+            "email": user_data["email"],
+            "full_name": user_data["full_name"],
+            "type": "access",
+            "exp": expire,
+        },
         settings.JWT_SECRET_KEY.get_secret_value(),
         algorithm=settings.JWT_ALGORITHM,
     )
@@ -43,9 +50,13 @@ def create_refresh_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    # jti = unique ID per refresh token, lets us invalidate specific tokens
     return jwt.encode(
-        {"sub": user_id, "exp": expire, "type": "refresh", "jti": str(uuid.uuid4())},
+        {
+            "sub": user_id,
+            "type": "refresh",
+            "jti": str(uuid.uuid4()),  # Unique ID for this token, useful for revocation
+            "exp": expire,
+        },
         settings.JWT_SECRET_KEY.get_secret_value(),
         algorithm=settings.JWT_ALGORITHM,
     )

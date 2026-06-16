@@ -202,10 +202,19 @@ async def oauth_callback(
 
     # --- Upsert in DB ---
     user = await upsert_oauth_user(db, user_data)
+    # print(f"user data: {user_data}")
+    # print(f"Retrieved user: {user}")
 
     # --- Issue our JWT pair ---
-    access_token = create_access_token(str(user.id), user.role.value)
-    refresh_token = create_refresh_token(str(user.id))
+    access_token = create_access_token(
+    user_id=str(user.id), 
+    role=user.role.value, 
+    user_data=user_data
+    )
+
+    refresh_token = create_refresh_token(
+        user_id=str(user.id)
+    )
 
     redirect_url = _build_redirect_to_frontend(access_token, refresh_token)
     response = RedirectResponse(redirect_url)

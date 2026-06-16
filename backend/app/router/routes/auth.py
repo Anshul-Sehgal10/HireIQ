@@ -7,13 +7,25 @@ from app.core.security import (
     create_access_token, create_refresh_token,
     decode_token, hash_password, verify_password,
 )
-from app.db.models import User, UserRole, CandidateProfile
+from app.db.models import User, UserRole
 from app.repositories.user_repo import get_user_by_email, create_user, get_user_by_id
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, RefreshRequest
 from jose import JWTError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# Helper function to inject cookies into responses
+def set_auth_cookies(response: Response, access_token: str):
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,        # Massive security boost: prevents JS from stealing the token via XSS
+        secure=True,          # Forces HTTPS (turn off or handle in local dev if needed, though most modern browsers are fine)
+        samesite="lax",       # Protects against CSRF while allowing standard cross-site navigation
+        path="/",             # Makes cookie available across all frontend routes
+        # max_age matches your access token expiry window (e.g., 15 mins to 1 day)
+        max_age=60 * 60 * 24  # 24 hours example
+    )
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(get_db)]):
@@ -32,37 +44,79 @@ async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(ge
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+async def login(
+    body: LoginRequest, 
+    response: Response,  # Inject FastAPI response context to set headers
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
+    # 1. Fetch user from DB by email
     user = await get_user_by_email(db, body.email)
-    if not user or not verify_password(body.password, user.hashed_password or ""):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="Account is deactivated")
+    if not user or not verify_password(body.password, user.hashed_password): # type: ignore 
+        raise HTTPException(status_code=400, detail="Incorrect email or password")
 
-    return TokenResponse(
-        access_token=create_access_token(str(user.id), user.role.value),
-        refresh_token=create_refresh_token(str(user.id)),
-        token_type="bearer",
+    # 2. Shape the user_data dict exactly like the token function expects
+    user_data = {
+        "email": user.email,
+        "full_name": user.full_name
+    }
+
+    # 3. Generate token pairs safely
+    access_token = create_access_token(
+        user_id=str(user.id), 
+        role=user.role.value, 
+        user_data=user_data
     )
+    refresh_token = create_refresh_token(user_id=str(user.id))
+
+    # 4. Drop the cookie straight into the client header
+    set_auth_cookies(response, access_token)
+
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer"
+    }
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+async def refresh(
+    body: RefreshRequest, 
+    response: Response,  # Inject response context here too
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
     try:
         payload = decode_token(body.refresh_token)
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Invalid token type")
+            
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
+    # 1. Fetch user from DB using the 'sub' claim
     user = await get_user_by_id(db, payload["sub"])
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found")
+        raise HTTPException(status_code=401, detail="User not found or inactive")
 
-    # Rotation: issue brand new pair, old refresh token is implicitly expired
+    # 2. Shape the user_data payload
+    user_data = {
+        "email": user.email,
+        "full_name": user.full_name  
+    }
+
+    # 3. Generate brand new token pair
+    new_access_token = create_access_token(
+        user_id=str(user.id), 
+        role=user.role.value, 
+        user_data=user_data
+    )
+    new_refresh_token = create_refresh_token(user_id=str(user.id))
+
+    # 4. Refresh the cookie with the updated token values
+    set_auth_cookies(response, new_access_token)
+
     return TokenResponse(
-        access_token=create_access_token(str(user.id), user.role.value),
-        refresh_token=create_refresh_token(str(user.id)),
+        access_token=new_access_token,
+        refresh_token=new_refresh_token,
         token_type="bearer",
     )
 

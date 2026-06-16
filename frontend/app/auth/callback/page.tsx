@@ -41,11 +41,13 @@ export default function OAuthCallbackPage() {
     // For production, consider httpOnly cookies set by the backend instead.
     localStorage.setItem("access_token", accessToken);
     localStorage.setItem("refresh_token", refreshToken);
+    document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
 
     // Decode role from the JWT payload (no library needed — just base64)
     try {
       const payload = JSON.parse(atob(accessToken.split(".")[1]));
       const role: string = payload.role;
+      console.log(role)
 
       // Clear tokens from URL immediately (they're in storage now)
       window.history.replaceState({}, "", "/auth/callback");

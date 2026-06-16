@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import OAuthButtons from "@/components/OAuthButtons";
+import Link from "next/dist/client/link";
 
 export default function LoginPage() {
   const [email, setEmail] = useState<string>("");
@@ -91,6 +92,10 @@ export default function LoginPage() {
             </button>
           </div>
         </form>
+
+        <Link href="/auth/register" className="font-medium text-blue-700 hover:text-blue-500  transition-colors">
+            Don't have an account? Sign up
+          </Link>
 
         {/* Divider */}
         <div className="relative my-6">
