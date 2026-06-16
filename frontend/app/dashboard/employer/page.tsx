@@ -1,10 +1,9 @@
-import { useEffect, useState } from 'react';
-
-function handleCreateJobPosting() {
-  window.location.href = 'http://localhost:3000/dashboard/employer/jobs';
-}
+"use client";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function EmployerDashboard() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,7 +15,11 @@ export default function EmployerDashboard() {
   }, []);
 
   if (loading) {
-    return <div className="flex items-center justify-center h-screen">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center h-screen">
+        Loading...
+      </div>
+    );
   }
 
   return (
@@ -34,10 +37,14 @@ export default function EmployerDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <h2 className="text-2xl font-bold mb-4">Welcome, Employer!</h2>
         <p className="text-slate-400">
-          This is your employer dashboard. Here you can manage your job postings, review applications, and connect with potential candidates.
+          This is your employer dashboard. Here you can manage your job
+          postings, review applications, and connect with potential candidates.
         </p>
 
-        <button className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors" onClick={handleCreateJobPosting}>
+        <button
+          className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+          onClick={() => router.push("/dashboard/employer/jobs")}
+        >
           Create Job Posting
         </button>
       </main>

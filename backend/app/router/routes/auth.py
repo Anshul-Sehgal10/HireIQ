@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_db
+from app.core.config import settings
 from app.core.security import (
     create_access_token, create_refresh_token,
     decode_token, hash_password, verify_password,
@@ -16,15 +17,18 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Helper function to inject cookies into responses
 def set_auth_cookies(response: Response, access_token: str):
+    # 1. Clear out any old, stale cookies explicitly first
+    response.delete_cookie(key="access_token", path="/")
+    
+    # 2. Set the fresh, new role token cookie
     response.set_cookie(
         key="access_token",
         value=access_token,
-        httponly=True,        # Massive security boost: prevents JS from stealing the token via XSS
-        secure=True,          # Forces HTTPS (turn off or handle in local dev if needed, though most modern browsers are fine)
-        samesite="lax",       # Protects against CSRF while allowing standard cross-site navigation
-        path="/",             # Makes cookie available across all frontend routes
-        # max_age matches your access token expiry window (e.g., 15 mins to 1 day)
-        max_age=60 * 60 * 24  # 24 hours example
+        httponly=True,        # Protects against XSS
+        secure=not settings.DEBUG,  # Allow local HTTP dev while keeping production cookie transport secure
+        samesite="lax",       # Protects against CSRF
+        path="/",             # CRITICAL: Must be root so all dashboard routes can clear/read it
+        max_age=60 * 60 * 24  # 24 hours
     )
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -53,7 +57,6 @@ async def login(
     user = await get_user_by_email(db, body.email)
     if not user or not verify_password(body.password, user.hashed_password): # type: ignore 
         raise HTTPException(status_code=400, detail="Incorrect email or password")
-
     # 2. Shape the user_data dict exactly like the token function expects
     user_data = {
         "email": user.email,
@@ -124,3 +127,10 @@ async def refresh(
 @router.get("/me")
 async def me(user: CurrentUser):
     return {"id": str(user.id), "email": user.email, "role": user.role, "name": user.full_name}
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+async def logout(response: Response):
+    response.delete_cookie(key="access_token", path="/")
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response

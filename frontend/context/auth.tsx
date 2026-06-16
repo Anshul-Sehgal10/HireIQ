@@ -1,10 +1,8 @@
 "use client";
 /*
     Using auth state in components:
-    "use client";
-    import { useAuth } from "@/context/auth";
-
-    export function Navbar() {
+import { apiUrl } from "@/lib/api";
+import { apiUrl } from "@/lib/api";
       const { user, logout } = useAuth();
 
       return (
@@ -17,6 +15,27 @@
 */
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+function decodeJwt(token: string): AuthUser | null {
+  try {
+    const payloadBase64Url = token.split(".")[1];
+    if (!payloadBase64Url) return null;
+
+    let payloadBase64 = payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/");
+    while (payloadBase64.length % 4) {
+      payloadBase64 += "=";
+    }
+
+    const payload = JSON.parse(atob(payloadBase64));
+    if (!payload.sub || !payload.role || !payload.exp) return null;
+
+    return { id: payload.sub, role: payload.role, exp: payload.exp };
+  } catch {
+    return null;
+  }
+}
 
 interface AuthUser {
   id: string;
@@ -38,17 +57,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadUser = useCallback(() => {
     const token = localStorage.getItem("access_token");
-    if (!token) { setLoading(false); return; }
+    if (!token) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      if (payload.exp * 1000 < Date.now()) {
-        // Token expired — try refresh
-        refreshTokens().then(loadUser);
+      const payload = decodeJwt(token);
+      if (!payload) {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("refresh_token");
+        setUser(null);
         return;
       }
-      setUser({ id: payload.sub, role: payload.role, exp: payload.exp });
+
+      if (payload.exp * 1000 < Date.now()) {
+        void refreshTokens().then(() => loadUser());
+        return;
+      }
+
+      setUser(payload);
     } catch {
       localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
     } finally {
       setLoading(false);
     }
@@ -57,10 +88,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { loadUser(); }, [loadUser]);
 
   const logout = () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
-    setUser(null);
-    window.location.href = "/auth/candidate";
+    void fetch(apiUrl("/auth/logout"), { method: "POST", credentials: "include" }).finally(() => {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      setUser(null);
+      window.location.href = "/auth/login";
+    });
   };
 
   return <AuthContext.Provider value={{ user, loading, logout }}>{children}</AuthContext.Provider>;
@@ -74,6 +107,7 @@ async function refreshTokens(): Promise<void> {
   const res = await fetch("/api/auth/refresh", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ refresh_token: refresh }),
   });
   if (!res.ok) {

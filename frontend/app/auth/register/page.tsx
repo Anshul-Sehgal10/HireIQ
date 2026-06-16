@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import OAuthButtons from '@/components/OAuthButtons';
+import { apiUrl } from '@/lib/api';
 
 type RegisterRole = 'candidate' | 'employer';
 
@@ -42,9 +43,7 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-      
-      const response = await fetch(`${BACKEND_URL}/auth/register`, {
+      const response = await fetch(apiUrl('/auth/register'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

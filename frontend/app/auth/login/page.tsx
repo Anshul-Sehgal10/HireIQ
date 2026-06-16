@@ -2,9 +2,33 @@
 
 import { useState, FormEvent } from "react";
 import OAuthButtons from "@/components/OAuthButtons";
-import Link from "next/dist/client/link";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { apiUrl } from "@/lib/api";
+
+function decodeJwtPayload(token: string): { role?: string } | null {
+  try {
+    const payloadBase64Url = token.split(".")[1];
+    if (!payloadBase64Url) return null;
+
+    let payloadBase64 = payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/");
+    while (payloadBase64.length % 4) {
+      payloadBase64 += "=";
+    }
+
+    return JSON.parse(window.atob(payloadBase64)) as { role?: string };
+  } catch {
+    return null;
+  }
+}
+
+function persistSession(accessToken: string, refreshToken: string) {
+  localStorage.setItem("access_token", accessToken);
+  localStorage.setItem("refresh_token", refreshToken);
+}
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
 
@@ -12,33 +36,42 @@ export default function LoginPage() {
     e.preventDefault();
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch(apiUrl("/auth/login"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ message: 'Login failed' }));
-        console.error('Login error:', err);
-        alert(err.message || 'Login failed');
+        const err = await res.json().catch(() => ({ detail: "Login failed" }));
+        alert(err.detail || "Login failed");
         return;
       }
 
-      const data = await res.json().catch(() => ({}));
-      console.log('Login success:', data);
-      // redirect or handle success as needed
-      alert('Signed in successfully');
+      const data = await res.json().catch(() => ({} as { access_token?: string; refresh_token?: string }));
+
+      if (data.access_token && data.refresh_token) {
+        persistSession(data.access_token, data.refresh_token);
+
+        const decodedPayload = decodeJwtPayload(data.access_token);
+        const userRole = decodedPayload?.role?.toLowerCase() || null;
+
+        if (userRole) {
+          router.replace(`/dashboard/${userRole}`);
+        } else {
+          alert("Could not resolve user role from security token.");
+        }
+      }
     } catch (error) {
-      console.error('Request error:', error);
-      alert('An error occurred. Please try again.');
+      console.error("Request error:", error);
+      alert("An error occurred. Please try again.");
     }
   };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-8 shadow-md">
-        
         {/* Header */}
         <div className="text-center">
           <h2 className="text-3xl font-bold tracking-tight text-gray-900">
@@ -53,7 +86,10 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="mt-8 space-y-6">
           <div className="space-y-4 rounded-md">
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="email"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Email Address
               </label>
               <input
@@ -68,7 +104,10 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="password"
+                className="block text-sm font-medium text-gray-700"
+              >
                 Password
               </label>
               <input
@@ -93,9 +132,9 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <Link href="/auth/register" className="font-medium text-blue-700 hover:text-blue-500  transition-colors">
-            Don't have an account? Sign up
-          </Link>
+        <Link href="/auth/register" className="font-medium text-blue-700 hover:text-blue-500 transition-colors">
+          Don't have an account? Sign up
+        </Link>
 
         {/* Divider */}
         <div className="relative my-6">
@@ -103,7 +142,9 @@ export default function LoginPage() {
             <div className="w-full border-t border-gray-300" />
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="bg-white px-2 text-gray-500">Or continue with</span>
+            <span className="bg-white px-2 text-gray-500">
+              Or continue with
+            </span>
           </div>
         </div>
 
@@ -111,7 +152,6 @@ export default function LoginPage() {
         <div className="mt-6">
           <OAuthButtons />
         </div>
-        
       </div>
     </div>
   );

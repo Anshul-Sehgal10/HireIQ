@@ -16,6 +16,12 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
+function persistSession(accessToken: string, refreshToken: string) {
+  localStorage.setItem("access_token", accessToken);
+  localStorage.setItem("refresh_token", refreshToken);
+  document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+}
+
 export default function OAuthCallbackPage() {
   const router = useRouter();
 
@@ -27,21 +33,16 @@ export default function OAuthCallbackPage() {
 
     if (error) {
       console.error("OAuth error:", error);
-      router.replace("/login?error=" + error);
+      router.replace("/auth/login?error=" + error);
       return;
     }
 
     if (!accessToken || !refreshToken) {
-      router.replace("/login?error=missing_tokens");
+      router.replace("/auth/login?error=missing_tokens");
       return;
     }
 
-    // Store tokens
-    // NOTE: localStorage is fine for development.
-    // For production, consider httpOnly cookies set by the backend instead.
-    localStorage.setItem("access_token", accessToken);
-    localStorage.setItem("refresh_token", refreshToken);
-    document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+    persistSession(accessToken, refreshToken);
 
     // Decode role from the JWT payload (no library needed — just base64)
     try {
@@ -58,7 +59,7 @@ export default function OAuthCallbackPage() {
       else router.replace("/dashboard/candidate");
 
     } catch {
-      router.replace("/login?error=invalid_token");
+      router.replace("/auth/login?error=invalid_token");
     }
   }, [router]);
 

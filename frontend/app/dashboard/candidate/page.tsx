@@ -1,66 +1,70 @@
-"use client";
-
-import { useEffect, useState } from "react";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 interface CustomJWTPayload {
   sub: string;
+  email: string;
+  full_name: string;
   role: string;
   exp: number;
 }
 
-export default function DashboardPage() {
-  const [userData, setUserData] = useState<CustomJWTPayload | null>(null);
-  const [formattedExpiry, setFormattedExpiry] = useState<string>("N/A");
-  const [loading, setLoading] = useState<boolean>(true);
+// Safe base64 decoding helper designed for Next.js Server Components
+function decodeJWT(token: string): CustomJWTPayload | null {
+  try {
+    const base64Url = token.split(".")[1];
+    if (!base64Url) return null;
 
-  useEffect(() => {
-    const token = localStorage.getItem("access_token");
-
-    if (token) {
-      try {
-        // Simple base64 decoding on the client side
-        const base64Url = token.split(".")[1];
-        const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-        const jsonPayload = decodeURIComponent(
-          window
-            .atob(base64)
-            .split("")
-            .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-            .join("")
-        );
-
-        const decoded = JSON.parse(jsonPayload) as CustomJWTPayload;
-        setUserData(decoded);
-
-        if (decoded.exp) {
-          setFormattedExpiry(new Date(decoded.exp * 1000).toLocaleString());
-        }
-      } catch (error) {
-        console.error("Failed to decode client token:", error);
-      }
+    let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    while (base64.length % 4) {
+      base64 += "=";
     }
-    setLoading(false);
-  }, []);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <p className="text-gray-500 animate-pulse">Loading session...</p>
-      </div>
-    );
+    const jsonPayload = Buffer.from(base64, "base64").toString("utf8");
+    return JSON.parse(jsonPayload) as CustomJWTPayload;
+  } catch (error) {
+    console.error("Failed to decode token on server:", error);
+    return null;
+  }
+}
+
+// This is now an async Server Component (Notice: no 'use client', no useEffect, no useState)
+export default async function CandidateDashboardPage() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+
+  let userData: CustomJWTPayload | null = null;
+  let formattedExpiry = "N/A";
+
+  if (token) {
+    userData = decodeJWT(token);
+    if (userData?.exp) {
+      formattedExpiry = new Date(userData.exp * 1000).toLocaleString();
+    }
   }
 
   return (
     <div className="min-h-screen bg-gray-100 p-6 sm:p-12">
       <div className="mx-auto max-w-2xl bg-white rounded-xl shadow-md overflow-hidden p-8">
         <div className="border-b border-gray-200 pb-4 mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-sm text-gray-500 mt-1">Decoded session metadata from Client LocalStorage</p>
+          <h1 className="text-2xl font-bold text-gray-900">Candidate Dashboard</h1>
+          <p className="text-sm text-gray-500 mt-1">Decoded session metadata securely from Server Cookies</p>
         </div>
 
         {userData ? (
           <div className="space-y-4">
+            {/* Added Full Name Display */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Welcome Back</span>
+              <p className="mt-1 text-lg font-bold text-gray-900">{userData.full_name}</p>
+            </div>
+
+            {/* Added Email Display */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Email Address</span>
+              <p className="mt-1 text-base text-gray-700">{userData.email}</p>
+            </div>
+
             <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
               <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">User ID (sub)</span>
               <code className="mt-1 block text-sm font-mono text-blue-600 break-all bg-blue-50 p-2 rounded border border-blue-100">
@@ -80,8 +84,8 @@ export default function DashboardPage() {
           </div>
         ) : (
           <div className="text-center py-6">
-            <p className="text-red-500 font-medium">No active session found (LocalStorage missing).</p>
-            <Link href="/login" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700">
+            <p className="text-red-500 font-medium">No active session found (Cookie missing or invalid).</p>
+            <Link href="/auth/login" className="mt-4 inline-block rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-700">
               Go to Login
             </Link>
           </div>

@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { apiUrl } from '@/lib/api';
 
 
 type UserRole = 'admin' | 'candidate' | 'employer';
@@ -63,14 +64,14 @@ export default function AdminDashboard() {
   }, [router]);
 
   const handleLogout = () => {
-    // 1. Clear Cookie by setting an expired date
-    document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT;';
-    
-    // 2. Clear LocalStorage fallback
-    localStorage.removeItem('access_token');
-
-    // 3. Redirect to login screen
-    router.push('/auth/login');
+    void fetch(apiUrl('/auth/logout'), {
+      method: 'POST',
+      credentials: 'include',
+    }).finally(() => {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      router.push('/auth/login');
+    });
   };
 
   if (loading) {

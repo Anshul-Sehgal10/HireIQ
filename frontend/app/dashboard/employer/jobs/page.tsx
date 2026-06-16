@@ -1,8 +1,5 @@
 "use client";
 import { useEffect, useState } from "react";
-import { useAuth } from "@/context/auth";
-import { RoleGuard } from "@/components/RoleGuard";
-
 interface Job {
   id: string;
   title: string;
@@ -27,9 +24,9 @@ async function apiFetch(path: string, options?: RequestInit) {
 
 export default function EmployerJobsPage() {
   return (
-    <RoleGuard allowed={["employer", "admin"]}>
+    // <RoleGuard allowed={["employer", "admin"]}>
+    // </RoleGuard>
       <JobsContent />
-    </RoleGuard>
   );
 }
 

@@ -29,7 +29,7 @@ export function RoleGuard({ allowed, children }: Props) {
   useEffect(() => {
     if (loading) return;
     if (!user || !allowed.includes(user.role)) {
-      router.replace("/auth/candidate");
+      router.replace("/auth/login");
     }
   }, [user, loading, allowed, router]);
 

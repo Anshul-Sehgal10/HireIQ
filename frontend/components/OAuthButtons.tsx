@@ -1,5 +1,7 @@
 "use client";
 
+import { apiUrl } from "@/lib/api";
+
 /**
  * OAuthButtons component
  *
@@ -12,8 +14,6 @@
  *   <OAuthButtons mode="login" />
  */
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-
 interface Props {
   mode?: "login" | "register"; // cosmetic only — same URL either way
 }
@@ -23,7 +23,7 @@ export default function OAuthButtons({ mode = "login" }: Props) {
 
   const handleOAuth = (provider: "google" | "linkedin") => {
     // Simple redirect — the backend sets the state cookie and redirects to provider
-    window.location.href = `${API_BASE}/auth/${provider}/login`;
+    window.location.href = apiUrl(`/auth/${provider}/login`);
   };
 
   return (
