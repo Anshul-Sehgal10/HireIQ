@@ -1,4 +1,4 @@
-from pydantic import Field, SecretStr, AnyUrl, TypeAdapter
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -22,9 +22,11 @@ class Settings(BaseSettings):
     LINKEDIN_CLIENT_ID: str = ""
     LINKEDIN_CLIENT_SECRET: SecretStr = SecretStr("")
     
-    # URL Validation
-    OAUTH_REDIRECT_BASE_URL: AnyUrl = TypeAdapter(AnyUrl).validate_python("http://localhost:8000")
-    FRONTEND_URL: AnyUrl = TypeAdapter(AnyUrl).validate_python("http://localhost:3000")
+    # URL config — use plain str to avoid Pydantic v2 AnyUrl trailing-slash serialization.
+    # e.g. AnyUrl("http://localhost:3000") stringifies to "http://localhost:3000/" which
+    # breaks f-string URL construction (produces double slashes).
+    OAUTH_REDIRECT_BASE_URL: str = "http://localhost:8000"
+    FRONTEND_URL: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(
         env_file=".env",

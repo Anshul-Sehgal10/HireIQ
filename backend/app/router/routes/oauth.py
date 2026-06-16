@@ -55,7 +55,8 @@ PROVIDERS = {
 
 
 def get_redirect_uri(provider: str) -> str:
-    return f"{settings.OAUTH_REDIRECT_BASE_URL}api/v1/auth/{provider}/callback"
+    base = settings.OAUTH_REDIRECT_BASE_URL.rstrip("/")
+    return f"{base}/api/v1/auth/{provider}/callback"
 
 
 # ---------------------------------------------------------------------------
@@ -67,12 +68,11 @@ def _build_redirect_to_frontend(access_token: str, refresh_token: str, error: st
     """
     Redirects to the Next.js /auth/callback page.
 
-    In a production app you'd set httpOnly cookies here instead of
-    query params. For now, query params are fine for development.
-    The frontend should immediately move these into memory / secure storage
-    and clear them from the URL bar.
+    Tokens are passed as query params (acceptable for development). For production,
+    use a short-lived code exchange via a Next.js API route instead.
+    The frontend immediately moves tokens into localStorage and clears the URL.
     """
-    base = f"{settings.FRONTEND_URL}/auth/callback"
+    base = settings.FRONTEND_URL.rstrip("/") + "/auth/callback"
     if error:
         return f"{base}?error={error}"
     return f"{base}?access_token={access_token}&refresh_token={refresh_token}"
@@ -218,6 +218,10 @@ async def oauth_callback(
 
     redirect_url = _build_redirect_to_frontend(access_token, refresh_token)
     response = RedirectResponse(redirect_url)
+
+    # Sync the backend-domain cookie with the new access token
+    from app.router.routes.auth import set_auth_cookies
+    set_auth_cookies(response, access_token)
 
     # Clear the state cookie — it's single-use
     response.delete_cookie(f"oauth_state_{provider}")

@@ -18,6 +18,18 @@ interface JWTPayload {
   exp: number;
 }
 
+function decodeJwtPayload(token: string): JWTPayload | null {
+  try {
+    let b64 = token.split(".")[1];
+    if (!b64) return null;
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    return JSON.parse(atob(b64)) as JWTPayload;
+  } catch {
+    return null;
+  }
+}
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [tokenData, setTokenData] = useState<JWTPayload | null>(null);
@@ -43,24 +55,16 @@ export default function AdminDashboard() {
       return;
     }
 
-    try {
-      // 2. Decode token and save state
-      const payload = JSON.parse(atob(token.split(".")[1]));
-      
-      // Security Check: Ensure the user is actually an admin
-      if (payload.role !== 'admin') {
-        router.push('/auth/login');
-        return;
-      }
-
-      setRawToken(token);
-      setTokenData(payload);
-    } catch (error) {
-      console.error('Invalid token format:', error);
-      handleLogout();
-    } finally {
-      setLoading(false);
+    const payload = decodeJwtPayload(token);
+    if (!payload || payload.role !== 'admin') {
+      console.log("Not an admin or invalid token");
+      router.push('/auth/login');
+      return;
     }
+
+    setRawToken(token);
+    setTokenData(payload);
+    setLoading(false);
   }, [router]);
 
   const handleLogout = () => {

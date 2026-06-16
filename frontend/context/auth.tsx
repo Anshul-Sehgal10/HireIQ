@@ -1,22 +1,63 @@
 "use client";
 /*
     Using auth state in components:
-import { apiUrl } from "@/lib/api";
-import { apiUrl } from "@/lib/api";
-      const { user, logout } = useAuth();
 
-      return (
-        <nav>
-          {user && <span>Signed in as {user.role}</span>}
-          {user && <button onClick={logout}>Sign out</button>}
-        </nav>
-      );
-    }
+      import { useAuth } from "@/context/auth";
+
+      export default function Nav() {
+        const { user, logout } = useAuth();
+        return (
+          <nav>
+            {user && <span>Signed in as {user.role}</span>}
+            {user && <button onClick={logout}>Sign out</button>}
+          </nav>
+        );
+      }
 */
 
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { apiUrl } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// ---------------------------------------------------------------------------
+// Cookie helpers (frontend-domain cookies that Next.js middleware can read)
+// ---------------------------------------------------------------------------
+
+/**
+ * Sets an access_token cookie on the FRONTEND domain so the Next.js middleware
+ * can read it for server-side route protection. This is separate from the
+ * httpOnly cookie the backend sets (which lives on the backend domain and is
+ * only sent back to the backend on credentialed requests).
+ *
+ * Expiry is derived from the token's own `exp` claim so the cookie and the
+ * token expire together. Falls back to 15 minutes if decoding fails.
+ */
+export function setAuthCookie(token: string) {
+  try {
+    let b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) {
+      b64 += "=";
+    }
+    const { exp } = JSON.parse(atob(b64));
+    const maxAge = exp ? exp - Math.floor(Date.now() / 1000) : 900;
+    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax`;
+  } catch {
+    document.cookie = `access_token=${token}; path=/; max-age=900; SameSite=Lax`;
+  }
+}
+
+export function clearAuthCookie() {
+  document.cookie = "access_token=; path=/; max-age=0";
+}
+
+// ---------------------------------------------------------------------------
+// JWT decode helper
+// ---------------------------------------------------------------------------
+
+interface AuthUser {
+  id: string;
+  role: "admin" | "employer" | "candidate";
+  exp: number;
+}
 
 function decodeJwt(token: string): AuthUser | null {
   try {
@@ -37,11 +78,9 @@ function decodeJwt(token: string): AuthUser | null {
   }
 }
 
-interface AuthUser {
-  id: string;
-  role: "admin" | "employer" | "candidate";
-  exp: number;
-}
+// ---------------------------------------------------------------------------
+// Context types
+// ---------------------------------------------------------------------------
 
 interface AuthCtx {
   user: AuthUser | null;
@@ -50,6 +89,10 @@ interface AuthCtx {
 }
 
 const AuthContext = createContext<AuthCtx>({ user: null, loading: true, logout: () => {} });
+
+// ---------------------------------------------------------------------------
+// Provider
+// ---------------------------------------------------------------------------
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
@@ -67,31 +110,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!payload) {
         localStorage.removeItem("access_token");
         localStorage.removeItem("refresh_token");
+        clearAuthCookie();
         setUser(null);
         return;
       }
 
       if (payload.exp * 1000 < Date.now()) {
+        // Token expired — try to silently refresh
         void refreshTokens().then(() => loadUser());
         return;
       }
 
+      // Token is valid — keep the middleware cookie in sync with the same TTL
+      setAuthCookie(token);
       setUser(payload);
     } catch {
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
+      clearAuthCookie();
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadUser(); }, [loadUser]);
 
   const logout = () => {
-    void fetch(apiUrl("/auth/logout"), { method: "POST", credentials: "include" }).finally(() => {
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      setUser(null);
+    // Clear the middleware cookie immediately (before the async call completes)
+    clearAuthCookie();
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    setUser(null);
+
+    void fetch(apiUrl("/auth/logout"), {
+      method: "POST",
+      credentials: "include",
+    }).finally(() => {
       window.location.href = "/auth/login";
     });
   };
@@ -101,21 +155,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export const useAuth = () => useContext(AuthContext);
 
+// ---------------------------------------------------------------------------
+// Token refresh (called internally when the access token has expired)
+// ---------------------------------------------------------------------------
+
 async function refreshTokens(): Promise<void> {
   const refresh = localStorage.getItem("refresh_token");
   if (!refresh) return;
-  const res = await fetch("/api/auth/refresh", {
+
+  const res = await fetch(apiUrl("/auth/refresh"), {   // ← was: /api/auth/refresh (wrong prefix)
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
     body: JSON.stringify({ refresh_token: refresh }),
   });
+
   if (!res.ok) {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
+    clearAuthCookie();
     return;
   }
+
   const { access_token, refresh_token } = await res.json();
   localStorage.setItem("access_token", access_token);
   localStorage.setItem("refresh_token", refresh_token);
+  // Update the middleware cookie with the new token
+  setAuthCookie(access_token);
 }

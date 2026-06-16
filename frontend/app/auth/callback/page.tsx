@@ -7,19 +7,37 @@
  *   http://localhost:3000/auth/callback?access_token=xxx&refresh_token=yyy
  *
  * This page:
- * 1. Reads the tokens from the URL
- * 2. Stores them (in memory via Zustand / context, or localStorage for dev)
- * 3. Clears the tokens from the URL bar (security hygiene)
- * 4. Redirects to the appropriate dashboard based on role
+ * 1. Reads the tokens from the URL search params
+ * 2. Saves them to localStorage (consistent with the email/password login flow)
+ * 3. Sets the frontend-domain cookie the Next.js middleware reads for route guarding
+ * 4. Clears the tokens from the URL bar (security hygiene)
+ * 5. Redirects to the appropriate dashboard based on the JWT role claim
+ *
+ * NOTE: Tokens in query params appear in browser history. For production,
+ * consider a Next.js API route that accepts a short-lived code and exchanges
+ * it for tokens server-side (PKCE-style handoff).
  */
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { setAuthCookie } from "@/context/auth";
 
 function persistSession(accessToken: string, refreshToken: string) {
   localStorage.setItem("access_token", accessToken);
   localStorage.setItem("refresh_token", refreshToken);
-  document.cookie = `access_token=${accessToken}; path=/; max-age=900; SameSite=Lax`;
+}
+
+/** Safely decodes a base64url-encoded JWT segment (handles padding and char substitution). */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    let b64 = token.split(".")[1];
+    if (!b64) return null;
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    return JSON.parse(atob(b64)) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 export default function OAuthCallbackPage() {
@@ -31,36 +49,53 @@ export default function OAuthCallbackPage() {
     const refreshToken = params.get("refresh_token");
     const error = params.get("error");
 
+    console.log("[OAuth Callback Page] Mounted. params:", { 
+      hasAccess: !!accessToken, 
+      hasRefresh: !!refreshToken, 
+      error 
+    });
+
     if (error) {
-      console.error("OAuth error:", error);
+      console.error("[OAuth Callback Page] Error in params:", error);
       router.replace("/auth/login?error=" + error);
       return;
     }
 
     if (!accessToken || !refreshToken) {
+      console.error("[OAuth Callback Page] Missing tokens in params");
       router.replace("/auth/login?error=missing_tokens");
       return;
     }
 
+    // Persist tokens — same storage strategy as email/password login
+    console.log("[OAuth Callback Page] Persisting tokens to localStorage...");
     persistSession(accessToken, refreshToken);
 
-    // Decode role from the JWT payload (no library needed — just base64)
-    try {
-      const payload = JSON.parse(atob(accessToken.split(".")[1]));
-      const role: string = payload.role;
-      console.log(role)
+    // Set the frontend-domain cookie so the Next.js middleware can enforce
+    // role-based route protection on /dashboard/* routes.
+    console.log("[OAuth Callback Page] Setting frontend-domain auth cookie...");
+    setAuthCookie(accessToken);
 
-      // Clear tokens from URL immediately (they're in storage now)
-      window.history.replaceState({}, "", "/auth/callback");
-
-      // Redirect based on role
-      if (role === "admin") router.replace("/dashboard/admin");
-      else if (role === "employer") router.replace("/dashboard/employer");
-      else router.replace("/dashboard/candidate");
-
-    } catch {
+    const payload = decodeJwtPayload(accessToken);
+    console.log("[OAuth Callback Page] Decoded payload:", payload);
+    if (!payload) {
+      console.error("[OAuth Callback Page] Failed to decode JWT payload");
       router.replace("/auth/login?error=invalid_token");
+      return;
     }
+
+    const role = typeof payload.role === "string" ? payload.role.toLowerCase() : null;
+    console.log("[OAuth Callback Page] Resolved role:", role);
+
+    // Clear tokens from URL immediately — they're persisted in storage now
+    window.history.replaceState({}, "", "/auth/callback");
+
+    let destination = "/dashboard/candidate";
+    if (role === "admin") destination = "/dashboard/admin";
+    else if (role === "employer") destination = "/dashboard/employer";
+
+    console.log("[OAuth Callback Page] Replacing router history with destination:", destination);
+    router.replace(destination);
   }, [router]);
 
   return (

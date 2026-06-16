@@ -5,6 +5,7 @@ import OAuthButtons from "@/components/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api";
+import { setAuthCookie } from "@/context/auth";
 
 function decodeJwtPayload(token: string): { role?: string } | null {
   try {
@@ -53,6 +54,9 @@ export default function LoginPage() {
 
       if (data.access_token && data.refresh_token) {
         persistSession(data.access_token, data.refresh_token);
+        // Set the frontend-domain cookie so Next.js middleware can read it
+        // for server-side route protection on /dashboard/* routes.
+        setAuthCookie(data.access_token);
 
         const decodedPayload = decodeJwtPayload(data.access_token);
         const userRole = decodedPayload?.role?.toLowerCase() || null;
