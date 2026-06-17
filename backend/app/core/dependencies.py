@@ -1,5 +1,5 @@
 from typing import Annotated
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,7 +12,11 @@ from app.repositories.user_repo import get_user_by_id
 bearer_scheme = HTTPBearer()
 
 """
+
 ## 1. Authentication: get_current_user
+OUTDATED DESCRIPTION, the function NOW checks both the Authorization header and the HttpOnly cookie for the access token. It also now checks that the token is an access token, not a refresh token.
+
+------
 
 This function intercepts incoming requests, strips away the security headers, and verifies the user.
 Here is the step-by-step pipeline it runs on every request:
@@ -27,17 +31,33 @@ or happens to be a refresh token instead of an access token, it throws a 401 Una
 (`user.is_active`). If everything checks out, it passes the User database object down the line.
 """
 async def get_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer_scheme)],
     db: Annotated[AsyncSession, Depends(get_db)],
+    request: Request, # Inject the HTTP request context
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(HTTPBearer(auto_error=False))] = None,
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid or expired token",
         headers={"WWW-Authenticate": "Bearer"},
     )
+    
+    token = None
+
+    # 1. Primary check: Try to extract token from standard Authorization header
+    if credentials:
+        token = credentials.credentials
+        
+    # 2. Secondary fallback: Look for our Next.js browser HttpOnly session cookie
+    if not token:
+        token = request.cookies.get("access_token")
+
+    # If the token is missing from both locations, boot them out
+    if not token:
+        raise credentials_exception
+
     try:
-        payload = decode_token(credentials.credentials)
-        if payload.get("type") != "access":  # reject refresh tokens used as access
+        payload = decode_token(token)
+        if payload.get("type") != "access":  # reject refresh tokens used as access tokens
             raise credentials_exception
         user_id: str = str(payload.get("sub"))
         if not user_id:
@@ -48,6 +68,7 @@ async def get_current_user(
     user = await get_user_by_id(db, user_id)
     if not user or not user.is_active:
         raise credentials_exception
+        
     return user
 
 """
@@ -82,7 +103,7 @@ This is the piece that makes RBAC clean throughout the whole app. In any route y
 @router.get("/jobs")
 async def list_jobs(user: EmployerUser):  # one line, fully protected
 """
-# Convenience aliases — use these in your route handlers
+# Convenience aliases - use these in your route handlers
 CurrentUser = Annotated[User, Depends(get_current_user)]
 AdminUser   = Annotated[User, Depends(require_role(UserRole.ADMIN))]
 EmployerUser = Annotated[User, Depends(require_role(UserRole.EMPLOYER, UserRole.ADMIN))]

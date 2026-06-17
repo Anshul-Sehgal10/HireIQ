@@ -16,11 +16,9 @@ from app.db.base import Base, TimestampMixin, UUIDMixin
 
 if TYPE_CHECKING:
     from .org_members import OrgMember
+    from .org_invites import OrgInvite
     from .job import JobPosting
 
-# ---------------------------------------------------------------------------
-# Enums
-# ---------------------------------------------------------------------------
 
 class VerificationStatus(str, enum.Enum):
     PENDING = "pending"
@@ -34,16 +32,10 @@ class SubscriptionTier(str, enum.Enum):
     PREMIUM = "premium"
     ENTERPRISE = "enterprise"
 
+
 class Organization(UUIDMixin, TimestampMixin, Base):
     """
     A verified employer / company tenant.
-
-    Design notes
-    ------------
-    - domain is used to auto-approve colleagues (e.g. @acme.com = Acme Corp).
-    - token_budget / tokens_used track LLM spend so employers see live cost.
-    - Every job posting and every pipeline channel is scoped to org_id — this
-      is the multi-tenancy boundary enforced at query level.
     """
 
     __tablename__ = "organizations"
@@ -52,7 +44,7 @@ class Organization(UUIDMixin, TimestampMixin, Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # e.g. acme.com
+    domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     verification_status: Mapped[VerificationStatus] = mapped_column(
         Enum(VerificationStatus, name="verification_status_enum"),
         nullable=False,
@@ -71,6 +63,7 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     # Relationships
     members: Mapped[List["OrgMember"]] = relationship(back_populates="organization", lazy="select")
     job_postings: Mapped[List["JobPosting"]] = relationship(back_populates="organization", lazy="select")
+    invites: Mapped[List["OrgInvite"]] = relationship(back_populates="organization", lazy="select")
 
     __table_args__ = (
         Index("ix_organizations_owner_id", "owner_id"),

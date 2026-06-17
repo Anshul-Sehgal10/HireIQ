@@ -15,6 +15,7 @@ from .pipeline import ChannelMember, ChannelMessage, MessageType, PipelineChanne
 from .scenario import ScenarioQuestion, ScenarioResponse
 from .organization import Organization, SubscriptionTier, VerificationStatus
 from .org_members import OrgMember, OrgRole
+from .org_invites import OrgInvite, InviteDirection, InviteStatus
 from .user import (
     OAuthProvider,
     User,
@@ -32,6 +33,9 @@ __all__ = [
     "SubscriptionTier",
     "OrgMember",
     "OrgRole",
+    "OrgInvite",
+    "InviteDirection",
+    "InviteStatus",
     # Candidate
     "CandidateProfile",
     "ResumeVersion",
