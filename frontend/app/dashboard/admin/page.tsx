@@ -1,11 +1,6 @@
-'use client';
-
-// temporary page 
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { apiUrl } from '@/lib/api';
-
+import { cookies } from "next/headers";
+import Link from "next/link";
+import LogoutButton from "@/components/LogoutButton";
 
 type UserRole = 'admin' | 'candidate' | 'employer';
 
@@ -13,7 +8,7 @@ interface JWTPayload {
   sub: string;         // Internal database User ID
   role: UserRole;
   email: string;
-  full_name: string;   // Updated from 'name' to match backend key
+  full_name: string;   
   type: 'access';
   exp: number;
 }
@@ -24,64 +19,29 @@ function decodeJwtPayload(token: string): JWTPayload | null {
     if (!b64) return null;
     b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
     while (b64.length % 4) b64 += "=";
-    return JSON.parse(atob(b64)) as JWTPayload;
+    
+    // Server-safe native Node decoding
+    return JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as JWTPayload;
   } catch {
     return null;
   }
 }
 
-export default function AdminDashboard() {
-  const router = useRouter();
-  const [tokenData, setTokenData] = useState<JWTPayload | null>(null);
-  const [rawToken, setRawToken] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+// Converted to async Server Component
+export default async function AdminDashboard() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value || "";
 
-  useEffect(() => {
-    // Helper to extract a cookie value by name
-    const getCookie = (name: string): string | null => {
-      const value = `; ${document.cookie}`;
-      const parts = value.split(`; ${name}=`);
-      if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
-      return null;
-    };
+  const tokenData = decodeJwtPayload(token);
 
-    // 1. Try to fetch token from Cookie, fallback to LocalStorage
-    const token = getCookie('access_token') || localStorage.getItem('access_token');
-
-    if (!token) {
-      // No token found anywhere, boot to login
-      console.log("No token found");
-      router.push('/auth/login');
-      return;
-    }
-
-    const payload = decodeJwtPayload(token);
-    if (!payload || payload.role !== 'admin') {
-      console.log("Not an admin or invalid token");
-      router.push('/auth/login');
-      return;
-    }
-
-    setRawToken(token);
-    setTokenData(payload);
-    setLoading(false);
-  }, [router]);
-
-  const handleLogout = () => {
-    void fetch(apiUrl('/auth/logout'), {
-      method: 'POST',
-      credentials: 'include',
-    }).finally(() => {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      router.push('/auth/login');
-    });
-  };
-
-  if (loading) {
+  // Fallback protection check if a user sneaks past middleware without admin claims
+  if (!tokenData || tokenData.role !== 'admin') {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-slate-900 text-white">
-        <p className="text-lg animate-pulse">Decoding secure token...</p>
+      <div className="min-h-screen bg-slate-900 text-slate-100 p-8 flex flex-col items-center justify-center">
+        <p className="text-red-400 font-medium mb-4">Access Denied. Insufficient administrative privileges.</p>
+        <Link href="/auth/login" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-500 transition-colors">
+          Return to Login
+        </Link>
       </div>
     );
   }
@@ -89,18 +49,16 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 p-8">
       {/* Top Navigation Bar */}
-      <header className="flex justify-between items-center border-b border-slate-800 pb-6 mb-8">
+      <header className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-800 pb-6 mb-8 gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Control Center</h1>
-          <p className="text-slate-400 mt-1">Welcome back, {tokenData?.full_name || 'Administrator'}</p>
+          <p className="text-slate-400 mt-1">Welcome back, {tokenData.full_name}</p>
         </div>
         
-        <button
-          onClick={handleLogout}
-          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 focus:ring-offset-slate-900"
-        >
-          Logout Session
-        </button>
+        {/* Reusable Client Component Logout Button */}
+        <div className="mt-[-24px] sm:mt-0">
+          <LogoutButton />
+        </div>
       </header>
 
       {/* Main Grid Content */}
@@ -114,16 +72,16 @@ export default function AdminDashboard() {
           <div className="space-y-4">
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Admin Name</label>
-              <p className="text-lg font-medium">{tokenData?.full_name || 'N/A'}</p>
+              <p className="text-lg font-medium">{tokenData.full_name}</p>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Email Address</label>
-              <p className="text-lg font-medium break-all">{tokenData?.email}</p>
+              <p className="text-lg font-medium break-all">{tokenData.email}</p>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Assigned Security Role</label>
-              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                {tokenData?.role}
+              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">
+                {tokenData.role}
               </span>
             </div>
           </div>
@@ -138,17 +96,17 @@ export default function AdminDashboard() {
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Unique User ID (sub)</label>
               <code className="text-sm font-mono block bg-slate-900/50 p-2 rounded mt-1 border border-slate-700/50 break-all">
-                {tokenData?.sub}
+                {tokenData.sub}
               </code>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Token Expiration (Unix Epoch)</label>
-              <p className="text-lg font-medium font-mono">{tokenData?.exp}</p>
+              <p className="text-lg font-medium font-mono">{tokenData.exp}</p>
             </div>
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block">Readable Expiry Date</label>
               <p className="text-sm font-medium text-slate-300">
-                {tokenData?.exp ? new Date(tokenData.exp * 1000).toLocaleString() : 'Unknown'}
+                {new Date(tokenData.exp * 1000).toLocaleString()}
               </p>
             </div>
           </div>
@@ -169,7 +127,7 @@ export default function AdminDashboard() {
             <div>
               <label className="text-xs text-slate-400 uppercase tracking-wider block mb-2">Stringified Bearer Hash Reference</label>
               <p className="text-xs font-mono bg-slate-950 p-3 rounded-lg text-slate-500 truncate select-all">
-                {rawToken}
+                {token}
               </p>
             </div>
           </div>

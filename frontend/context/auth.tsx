@@ -15,7 +15,13 @@
       }
 */
 
-import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+} from "react";
 import { apiUrl } from "@/lib/api";
 
 // ---------------------------------------------------------------------------
@@ -39,7 +45,10 @@ export function setAuthCookie(token: string) {
     }
     const { exp } = JSON.parse(atob(b64));
     const maxAge = exp ? exp - Math.floor(Date.now() / 1000) : 900;
-    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax; Secure`;
+
+    const isSecure = window.location.protocol === "https:";
+    const secureFlag = isSecure ? "; Secure" : "";
+    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax${secureFlag}`;
   } catch {
     document.cookie = `access_token=${token}; path=/; max-age=900; SameSite=Lax`;
   }
@@ -88,7 +97,11 @@ interface AuthCtx {
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthCtx>({ user: null, loading: true, logout: () => {} });
+const AuthContext = createContext<AuthCtx>({
+  user: null,
+  loading: true,
+  logout: () => {},
+});
 
 // ---------------------------------------------------------------------------
 // Provider
@@ -133,24 +146,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadUser(); }, [loadUser]);
+  useEffect(() => {
+    loadUser();
+  }, [loadUser]);
 
-  const logout = () => {
-    // Clear the middleware cookie immediately (before the async call completes)
-    clearAuthCookie();
+  const logout = useCallback(() => {
+    // 1. Clear client-side storage immediately — don't wait for the API call
     localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    clearAuthCookie();
     setUser(null);
 
+    // 2. Tell the backend to clear the HttpOnly refresh_token cookie
     void fetch(apiUrl("/auth/logout"), {
       method: "POST",
-      credentials: "include",
+      credentials: "include", // sends the HttpOnly cookie so backend can clear it
     }).finally(() => {
       window.location.href = "/auth/login";
     });
-  };
+  }, []);
 
-  return <AuthContext.Provider value={{ user, loading, logout }}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, loading, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export const useAuth = () => useContext(AuthContext);
@@ -160,26 +179,18 @@ export const useAuth = () => useContext(AuthContext);
 // ---------------------------------------------------------------------------
 
 async function refreshTokens(): Promise<void> {
-  const refresh = localStorage.getItem("refresh_token");
-  if (!refresh) return;
-
-  const res = await fetch(apiUrl("/auth/refresh"), {   // ← was: /api/auth/refresh (wrong prefix)
+  const res = await fetch(apiUrl("/auth/refresh"), {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ refresh_token: refresh }),
   });
 
   if (!res.ok) {
     localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
     clearAuthCookie();
     return;
   }
 
-  const { access_token, refresh_token } = await res.json();
+  const { access_token } = await res.json();
   localStorage.setItem("access_token", access_token);
-  localStorage.setItem("refresh_token", refresh_token);
-  // Update the middleware cookie with the new token
   setAuthCookie(access_token);
 }

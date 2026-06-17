@@ -3,8 +3,8 @@
 /**
  * /app/auth/callback/page.tsx
  *
- * The backend redirects here after OAuth completes:
- *   http://localhost:3000/auth/callback?access_token=xxx&refresh_token=yyy
+ * http://localhost:3000/auth/callback?access_token=xxx
+ * (refresh_token is set as an HttpOnly cookie by the backend directly)
  *
  * This page:
  * 1. Reads the tokens from the URL search params
@@ -22,9 +22,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { setAuthCookie } from "@/context/auth";
 
-function persistSession(accessToken: string, refreshToken: string) {
+function persistSession(accessToken: string) {
   localStorage.setItem("access_token", accessToken);
-  localStorage.setItem("refresh_token", refreshToken);
 }
 
 /** Safely decodes a base64url-encoded JWT segment (handles padding and char substitution). */
@@ -46,12 +45,10 @@ export default function OAuthCallbackPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const accessToken = params.get("access_token");
-    const refreshToken = params.get("refresh_token");
     const error = params.get("error");
 
     console.log("[OAuth Callback Page] Mounted. params:", { 
       hasAccess: !!accessToken, 
-      hasRefresh: !!refreshToken, 
       error 
     });
 
@@ -61,15 +58,15 @@ export default function OAuthCallbackPage() {
       return;
     }
 
-    if (!accessToken || !refreshToken) {
-      console.error("[OAuth Callback Page] Missing tokens in params");
+    if (!accessToken) {
+      console.error("[OAuth Callback Page] Missing access token in params");
       router.replace("/auth/login?error=missing_tokens");
       return;
     }
 
     // Persist tokens — same storage strategy as email/password login
     console.log("[OAuth Callback Page] Persisting tokens to localStorage...");
-    persistSession(accessToken, refreshToken);
+    persistSession(accessToken);
 
     // Set the frontend-domain cookie so the Next.js middleware can enforce
     // role-based route protection on /dashboard/* routes.

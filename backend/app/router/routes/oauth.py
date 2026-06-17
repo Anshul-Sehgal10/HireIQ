@@ -64,7 +64,7 @@ def get_redirect_uri(provider: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _build_redirect_to_frontend(access_token: str, refresh_token: str, error: str | None = None) -> str:
+def _build_redirect_to_frontend(access_token: str, error: str | None = None) -> str:
     """
     Redirects to the Next.js /auth/callback page.
 
@@ -75,7 +75,7 @@ def _build_redirect_to_frontend(access_token: str, refresh_token: str, error: st
     base = settings.FRONTEND_URL.rstrip("/") + "/auth/callback"
     if error:
         return f"{base}?error={error}"
-    return f"{base}?access_token={access_token}&refresh_token={refresh_token}"
+    return f"{base}?access_token={access_token}"  # no refresh_token in URL
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +159,7 @@ async def oauth_callback(
 
     # Handle provider-level errors (e.g. user denied consent)
     if error:
-        redirect_url = _build_redirect_to_frontend("", "", error=f"oauth_denied_{provider}")
+        redirect_url = _build_redirect_to_frontend("", error=f"oauth_denied_{provider}")
         return RedirectResponse(redirect_url)
 
     if not code:
@@ -192,7 +192,7 @@ async def oauth_callback(
 
     except Exception as exc:
         print(f"OAuth error ({provider}): {exc}")
-        redirect_url = _build_redirect_to_frontend("", "", error="oauth_failed")
+        redirect_url = _build_redirect_to_frontend("", error=f"oauth_failed")
         response = RedirectResponse(redirect_url)
         response.delete_cookie(f"oauth_state_{provider}")
         return response
@@ -216,12 +216,11 @@ async def oauth_callback(
         user_id=str(user.id)
     )
 
-    redirect_url = _build_redirect_to_frontend(access_token, refresh_token)
+    redirect_url = _build_redirect_to_frontend(access_token=access_token)
     response = RedirectResponse(redirect_url)
 
-    # Sync the backend-domain cookie with the new access token
-    from app.router.routes.auth import set_auth_cookies
-    set_auth_cookies(response, access_token)
+    from app.router.routes.auth import set_refresh_cookie
+    set_refresh_cookie(response, refresh_token)
 
     # Clear the state cookie — it's single-use
     response.delete_cookie(f"oauth_state_{provider}")

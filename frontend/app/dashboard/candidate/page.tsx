@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
+import LogoutButton from "@/components/LogoutButton"; // Import the client button
 
 interface CustomJWTPayload {
   sub: string;
@@ -9,7 +10,6 @@ interface CustomJWTPayload {
   exp: number;
 }
 
-// Safe base64 decoding helper designed for Next.js Server Components
 function decodeJWT(token: string): CustomJWTPayload | null {
   try {
     const base64Url = token.split(".")[1];
@@ -28,7 +28,6 @@ function decodeJWT(token: string): CustomJWTPayload | null {
   }
 }
 
-// This is now an async Server Component (Notice: no 'use client', no useEffect, no useState)
 export default async function CandidateDashboardPage() {
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value;
@@ -52,36 +51,40 @@ export default async function CandidateDashboardPage() {
         </div>
 
         {userData ? (
-          <div className="space-y-4">
-            {/* Added Full Name Display */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Welcome Back</span>
-              <p className="mt-1 text-lg font-bold text-gray-900">{userData.full_name}</p>
+          /* Wrapped multiple sibling items cleanly inside a single Fragment fragment wrapper */
+          <>
+            <div className="space-y-4">
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Welcome Back</span>
+                <p className="mt-1 text-lg font-bold text-gray-900">{userData.full_name}</p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Email Address</span>
+                <p className="mt-1 text-base text-gray-700">{userData.email}</p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">User ID (sub)</span>
+                <code className="mt-1 block text-sm font-mono text-blue-600 break-all bg-blue-50 p-2 rounded border border-blue-100">
+                  {userData.sub}
+                </code>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Assigned Role</span>
+                <p className="mt-1 text-base font-medium text-gray-900 capitalize">{userData.role || "No role assigned"}</p>
+              </div>
+
+              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Token Expiration (exp)</span>
+                <p className="mt-1 text-base font-medium text-gray-900">{formattedExpiry}</p>
+              </div>
             </div>
 
-            {/* Added Email Display */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Email Address</span>
-              <p className="mt-1 text-base text-gray-700">{userData.email}</p>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">User ID (sub)</span>
-              <code className="mt-1 block text-sm font-mono text-blue-600 break-all bg-blue-50 p-2 rounded border border-blue-100">
-                {userData.sub}
-              </code>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Assigned Role</span>
-              <p className="mt-1 text-base font-medium text-gray-900 capitalize">{userData.role || "No role assigned"}</p>
-            </div>
-
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-              <span className="block text-xs font-semibold uppercase tracking-wider text-gray-400">Token Expiration (exp)</span>
-              <p className="mt-1 text-base font-medium text-gray-900">{formattedExpiry}</p>
-            </div>
-          </div>
+            {/* Rendering our safe client component toggle link */}
+            <LogoutButton />
+          </>
         ) : (
           <div className="text-center py-6">
             <p className="text-red-500 font-medium">No active session found (Cookie missing or invalid).</p>
