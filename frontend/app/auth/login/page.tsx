@@ -23,9 +23,8 @@ function decodeJwtPayload(token: string): { role?: string } | null {
   }
 }
 
-function persistSession(accessToken: string, refreshToken: string) {
+function persistSession(accessToken: string) {
   localStorage.setItem("access_token", accessToken);
-  localStorage.setItem("refresh_token", refreshToken);
 }
 
 export default function LoginPage() {
@@ -50,12 +49,13 @@ export default function LoginPage() {
         return;
       }
 
-      const data = await res.json().catch(() => ({} as { access_token?: string; refresh_token?: string }));
+      const data = await res
+        .json()
+        .catch(() => ({}) as { access_token?: string });
 
-      if (data.access_token && data.refresh_token) {
-        persistSession(data.access_token, data.refresh_token);
-        // Set the frontend-domain cookie so Next.js middleware can read it
-        // for server-side route protection on /dashboard/* routes.
+      if (data.access_token) {
+        persistSession(data.access_token);
+
         setAuthCookie(data.access_token);
 
         const decodedPayload = decodeJwtPayload(data.access_token);
@@ -66,6 +66,9 @@ export default function LoginPage() {
         } else {
           alert("Could not resolve user role from security token.");
         }
+      } else if (!data.access_token) {
+        alert("Login response did not contain an access token.");
+        return;
       }
     } catch (error) {
       console.error("Request error:", error);
@@ -136,7 +139,10 @@ export default function LoginPage() {
           </div>
         </form>
 
-        <Link href="/auth/register" className="font-medium text-blue-700 hover:text-blue-500 transition-colors">
+        <Link
+          href="/auth/register"
+          className="font-medium text-blue-700 hover:text-blue-500 transition-colors"
+        >
           Don't have an account? Sign up
         </Link>
 

@@ -39,7 +39,7 @@ export function setAuthCookie(token: string) {
     }
     const { exp } = JSON.parse(atob(b64));
     const maxAge = exp ? exp - Math.floor(Date.now() / 1000) : 900;
-    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax`;
+    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax; Secure`;
   } catch {
     document.cookie = `access_token=${token}; path=/; max-age=900; SameSite=Lax`;
   }
