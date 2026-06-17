@@ -39,7 +39,7 @@ async def get_current_user(
         payload = decode_token(credentials.credentials)
         if payload.get("type") != "access":  # reject refresh tokens used as access
             raise credentials_exception
-        user_id: str = payload.get("sub")
+        user_id: str = str(payload.get("sub"))
         if not user_id:
             raise credentials_exception
     except JWTError:

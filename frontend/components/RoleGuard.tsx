@@ -1,7 +1,9 @@
 "use client";
 
 /*
-    For cases where middleware isn't enough (or as a fallback), a <RoleGuard> component.
+
+    Layer 2 — RoleGuard component: Use this for pages where the route is shared but content is role-specific, or as a fallback when you want a client-side double-check.
+
     Usage:
     import { RoleGuard } from "@/components/RoleGuard";
 

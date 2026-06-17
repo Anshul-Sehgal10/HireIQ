@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
+ * Layer 1 — Middleware (middleware.ts): Already handles all /dashboard/* routes. As you add new
+ * protected route groups, just extend ROLE_ROUTES
+ * 
  * Role-based route guard.
  *
  * Reads the `access_token` cookie (set on the *frontend* domain by the
@@ -12,12 +15,17 @@ import { NextRequest, NextResponse } from "next/server";
  * This is a UX-layer defence that prevents a flash of wrong content and
  * provides fast server-side redirects. It is NOT the security boundary —
  * the FastAPI backend (get_current_user + require_role) enforces that.
+ *
+ * The middleware handles entire subtrees — /dashboard/employer covers /dashboard/employer/jobs, /dashboard/* employer/applications, everything under it. You never need to touch middleware again for new pages under * existing route groups.
  */
 
 const ROLE_ROUTES: Record<string, string[]> = {
-  "/dashboard/admin":     ["admin"],
-  "/dashboard/employer":  ["employer", "admin"],
+  "/dashboard/admin": ["admin"],
+  "/dashboard/employer": ["employer", "admin"],
   "/dashboard/candidate": ["candidate", "admin"],
+  // Add more role-based routes here as needed. Eg -
+  // "/onboarding":          ["employer", "candidate"],
+  // "/apply":               ["candidate"],
 };
 
 /** Safely decodes a JWT payload. Returns null on any error. */
@@ -56,20 +64,28 @@ export function middleware(req: NextRequest) {
   if (!matchedRoute) return NextResponse.next();
 
   const token = req.cookies.get("access_token")?.value;
-  console.log(`[Middleware] Path: ${pathname}, Matched: ${matchedRoute}, HasToken: ${!!token}`);
+  console.log(
+    `[Middleware] Path: ${pathname}, Matched: ${matchedRoute}, HasToken: ${!!token}`,
+  );
   if (!token) {
     console.log(`[Middleware] Redirecting to /auth/login: token is missing`);
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
   const role = decodeRole(token);
-  console.log(`[Middleware] Decoded role: ${role}, Allowed: [${ROLE_ROUTES[matchedRoute].join(", ")}]`);
+  console.log(
+    `[Middleware] Decoded role: ${role}, Allowed: [${ROLE_ROUTES[matchedRoute].join(", ")}]`,
+  );
   if (!role || !ROLE_ROUTES[matchedRoute].includes(role)) {
-    console.log(`[Middleware] Redirecting to /auth/login: role invalid or not allowed`);
+    console.log(
+      `[Middleware] Redirecting to /auth/login: role invalid or not allowed`,
+    );
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
-  console.log(`[Middleware] Verification successful. Allowing access to ${pathname}`);
+  console.log(
+    `[Middleware] Verification successful. Allowing access to ${pathname}`,
+  );
   return NextResponse.next();
 }
 

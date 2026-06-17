@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import LogoutButton from "@/components/LogoutButton";
 
-interface CustomJWTPayload {
+interface JWTPayload {
   sub: string;
   email: string;
   full_name: string;
@@ -10,7 +10,7 @@ interface CustomJWTPayload {
   exp: number;
 }
 
-function decodeJWT(token: string): CustomJWTPayload | null {
+function decodeJWT(token: string): JWTPayload | null {
   try {
     const base64Url = token.split(".")[1];
     if (!base64Url) return null;
@@ -21,7 +21,7 @@ function decodeJWT(token: string): CustomJWTPayload | null {
     }
 
     const jsonPayload = Buffer.from(base64, "base64").toString("utf8");
-    return JSON.parse(jsonPayload) as CustomJWTPayload;
+    return JSON.parse(jsonPayload) as JWTPayload;
   } catch (error) {
     console.error("Failed to decode token on server:", error);
     return null;
@@ -33,7 +33,7 @@ export default async function EmployerDashboard() {
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value;
 
-  let userData: CustomJWTPayload | null = null;
+  let userData: JWTPayload | null = null;
 
   if (token) {
     userData = decodeJWT(token);

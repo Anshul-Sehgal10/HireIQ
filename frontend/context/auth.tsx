@@ -1,18 +1,18 @@
 "use client";
 /*
+    Layer 3 — useAuth hook: Use this inside components when you need the user's identity to conditionally render UI, not for blocking access
+    
     Using auth state in components:
-
-      import { useAuth } from "@/context/auth";
-
-      export default function Nav() {
-        const { user, logout } = useAuth();
-        return (
-          <nav>
-            {user && <span>Signed in as {user.role}</span>}
-            {user && <button onClick={logout}>Sign out</button>}
-          </nav>
-        );
-      }
+    function NavBar() {
+      const { user, logout } = useAuth();
+      return (
+        <nav>
+          {user?.role === "employer" && <Link href="/dashboard/employer/jobs">Jobs</Link>}
+          {user?.role === "candidate" && <Link href="/dashboard/candidate">Feed</Link>}
+          <button onClick={logout}>Sign out</button>
+        </nav>
+      );
+    }
 */
 
 import {
@@ -55,7 +55,7 @@ export function setAuthCookie(token: string) {
 }
 
 export function clearAuthCookie() {
-  document.cookie = "access_token=; path=/; max-age=0";
+  document.cookie = "access_token=; path=/; max-age=0; SameSite=Lax";
 }
 
 // ---------------------------------------------------------------------------
