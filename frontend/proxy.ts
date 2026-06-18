@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
 /**
- * Layer 1 — Middleware (middleware.ts): Already handles all /dashboard/* routes. As you add new
+ * Layer 1 — Middleware, Now proxy (proxy.ts): Already handles all /dashboard/* routes. As you add new
  * protected route groups, just extend ROLE_ROUTES
- * 
+ *
  * Role-based route guard.
  *
  * Reads the `access_token` cookie (set on the *frontend* domain by the
@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
  * provides fast server-side redirects. It is NOT the security boundary —
  * the FastAPI backend (get_current_user + require_role) enforces that.
  *
- * The middleware handles entire subtrees — /dashboard/employer covers /dashboard/employer/jobs, /dashboard/* employer/applications, everything under it. You never need to touch middleware again for new pages under * existing route groups.
+ * The proxy handles entire subtrees — /dashboard/employer covers /dashboard/employer/jobs, /dashboard/* employer/applications, everything under it. You never need to touch proxy again for new pages under * existing route groups.
  */
 
 const ROLE_ROUTES: Record<string, string[]> = {
@@ -24,6 +24,8 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/dashboard/employer":  ["employer", "admin"],
   "/dashboard/candidate": ["candidate", "admin"],
   "/onboarding":          ["employer", "candidate", "admin"],
+  "/profile":             ["admin", "employer", "candidate"],
+
   // Add more role-based routes here as needed. Eg -
   // "/onboarding":          ["employer", "candidate"],
   // "/apply":               ["candidate"],
@@ -34,10 +36,8 @@ function safeDecodeJWT(token: string): Record<string, unknown> | null {
   try {
     const base64Url = token.split(".")[1];
     if (!base64Url) return null;
-
     let base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
     while (base64.length % 4) base64 += "=";
-
     return JSON.parse(atob(base64)) as Record<string, unknown>;
   } catch {
     return null;
@@ -47,16 +47,13 @@ function safeDecodeJWT(token: string): Record<string, unknown> | null {
 function decodeRole(token: string): string | null {
   const payload = safeDecodeJWT(token);
   if (!payload) return null;
-
-  // Reject expired tokens (exp is in seconds, Date.now() is in milliseconds)
   if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) {
     return null;
   }
-
   return typeof payload.role === "string" ? payload.role.toLowerCase() : null;
 }
 
-export function middleware(req: NextRequest) {
+export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
   const matchedRoute = Object.keys(ROLE_ROUTES).find(
@@ -65,31 +62,18 @@ export function middleware(req: NextRequest) {
   if (!matchedRoute) return NextResponse.next();
 
   const token = req.cookies.get("access_token")?.value;
-  console.log(
-    `[Middleware] Path: ${pathname}, Matched: ${matchedRoute}, HasToken: ${!!token}`,
-  );
   if (!token) {
-    console.log(`[Middleware] Redirecting to /auth/login: token is missing`);
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
   const role = decodeRole(token);
-  console.log(
-    `[Middleware] Decoded role: ${role}, Allowed: [${ROLE_ROUTES[matchedRoute].join(", ")}]`,
-  );
   if (!role || !ROLE_ROUTES[matchedRoute].includes(role)) {
-    console.log(
-      `[Middleware] Redirecting to /auth/login: role invalid or not allowed`,
-    );
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
-  console.log(
-    `[Middleware] Verification successful. Allowing access to ${pathname}`,
-  );
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*, /onboarding/:path*"],
+  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/profile"],
 };

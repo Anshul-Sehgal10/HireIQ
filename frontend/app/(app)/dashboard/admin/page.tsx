@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import LogoutButton from "@/components/LogoutButton";
 
 type UserRole = 'admin' | 'candidate' | 'employer';
 
@@ -53,11 +52,6 @@ export default async function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Admin Control Center</h1>
           <p className="text-slate-400 mt-1">Welcome back, {tokenData.full_name}</p>
-        </div>
-        
-        {/* Reusable Client Component Logout Button */}
-        <div className="mt-[-24px] sm:mt-0">
-          <LogoutButton />
         </div>
       </header>
 

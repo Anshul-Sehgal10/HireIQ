@@ -9,8 +9,9 @@ from app.core.security import (
     decode_token, hash_password, verify_password,
 )
 from app.db.models import User, UserRole
-from app.repositories.user_repo import get_user_by_email, create_user, get_user_by_id
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.db.models.user import OAuthProvider
+from app.repositories.user_repo import get_user_by_email, create_user, get_user_by_id, update_user
+from app.schemas.auth import LoginRequest, RegisterRequest, UpdateProfileRequest
 from jose import JWTError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -181,7 +182,76 @@ async def refresh(
 
 @router.get("/me")
 async def me(user: CurrentUser):
-    return {"id": str(user.id), "email": user.email, "role": user.role, "name": user.full_name}
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "role": user.role,
+        "full_name": user.full_name,
+        "has_password": user.hashed_password is not None,
+        "oauth_provider": user.oauth_provider,
+    }
+
+@router.patch("/me")
+async def update_me(
+    body: UpdateProfileRequest,
+    response: Response,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    updates = {}
+    # --- full_name ---
+    if body.full_name is not None:
+        updates["full_name"] = body.full_name.strip()
+
+    # --- email ---
+    if body.email is not None and body.email.lower() != user.email:
+        # Block email changes for OAuth accounts
+        if user.oauth_provider != OAuthProvider.LOCAL:
+            raise HTTPException(
+                400,
+                f"Your account is linked to {user.oauth_provider.value.title()}. "
+                "Email cannot be changed directly — it is managed by your OAuth provider."
+            )
+        existing = await get_user_by_email(db, body.email)
+        if existing:
+            raise HTTPException(400, "Email already in use")
+        updates["email"] = body.email.lower().strip()
+
+    # --- password ---
+    if body.new_password is not None:
+        # If user already has a password, require current_password verification
+        if user.hashed_password:
+            if not body.current_password:
+                raise HTTPException(400, "Current password is required")
+            if not verify_password(body.current_password, user.hashed_password):
+                raise HTTPException(400, "Current password is incorrect")
+        # OAuth user setting password for first time — no verification needed
+        updates["hashed_password"] = hash_password(body.new_password)
+
+    if not updates:
+        raise HTTPException(400, "No fields to update")
+
+    updated_user = await update_user(db, user.id, updates)
+
+    # Re-issue tokens if email or name changed (both are in the JWT payload)
+    if "email" in updates or "full_name" in updates:
+        user_data = {
+            "email": updated_user.email,
+            "full_name": updated_user.full_name,
+        }
+        access_token = create_access_token(str(updated_user.id), updated_user.role.value, user_data)
+        refresh_token = create_refresh_token(str(updated_user.id))
+        set_refresh_cookie(response, refresh_token)
+        set_access_cookie(response, access_token)
+
+    return {
+        "id": str(updated_user.id),
+        "email": updated_user.email,
+        "full_name": updated_user.full_name,
+        "role": updated_user.role,
+        "has_password": updated_user.hashed_password is not None,
+        "oauth_provider": updated_user.oauth_provider,
+    }
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

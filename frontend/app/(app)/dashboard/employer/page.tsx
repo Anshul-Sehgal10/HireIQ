@@ -1,7 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import LogoutButton from "@/components/LogoutButton";
 
 interface JWTPayload {
   sub: string;
@@ -105,10 +104,6 @@ export default async function EmployerDashboard() {
             <h3 className="font-semibold text-white">Analytics</h3>
             <p className="text-sm text-slate-400 mt-1">Coming soon</p>
           </div>
-        </div>
-
-        <div className="mt-2">
-          <LogoutButton />
         </div>
       </main>
     </div>

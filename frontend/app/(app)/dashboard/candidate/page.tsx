@@ -1,6 +1,5 @@
 import { cookies } from "next/headers";
 import Link from "next/link";
-import LogoutButton from "@/components/LogoutButton"; // Import the client button
 
 interface CustomJWTPayload {
   sub: string;
@@ -81,9 +80,6 @@ export default async function CandidateDashboardPage() {
                 <p className="mt-1 text-base font-medium text-gray-900">{formattedExpiry}</p>
               </div>
             </div>
-
-            {/* Rendering our safe client component toggle link */}
-            <LogoutButton />
           </>
         ) : (
           <div className="text-center py-6">

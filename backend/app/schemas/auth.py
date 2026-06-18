@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
 from app.db.models import UserRole
+from typing import Optional
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -17,3 +18,10 @@ class TokenResponse(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+class UpdateProfileRequest(BaseModel):
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    # Password change
+    current_password: Optional[str] = None   # required if user already has a password
+    new_password: Optional[str] = None
