@@ -38,26 +38,18 @@ import { apiUrl } from "@/lib/api";
  * token expire together. Falls back to 15 minutes if decoding fails.
  */
 
-export function setAuthCookie(token: string) {
-  try {
-    let b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
-    while (b64.length % 4) {
-      b64 += "=";
-    }
-    const { exp } = JSON.parse(atob(b64));
-    const maxAge = exp ? exp - Math.floor(Date.now() / 1000) : 900;
-
-    const isSecure = window.location.protocol === "https:";
-    const secureFlag = isSecure ? "; Secure" : "";
-    document.cookie = `access_token=${token}; path=/; max-age=${Math.max(maxAge, 0)}; SameSite=Lax${secureFlag}`;
-  } catch {
-    document.cookie = `access_token=${token}; path=/; max-age=900; SameSite=Lax`;
-  }
-}
-
 export function clearAuthCookie() {
   document.cookie = "access_token=; path=/; max-age=0; SameSite=Lax";
 }
+
+export function getAccessTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("access_token="));
+  return match ? match.split("=").slice(1).join("=") : null;
+}
+
 
 // ---------------------------------------------------------------------------
 // JWT decode helper
@@ -101,14 +93,14 @@ function decodeJwt(token: string): AuthUser | null {
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
-  login: (token: string) => void;
+  reloadUser: () => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null,
   loading: true,
-  login: () => {},
+  reloadUser: () => {},
   logout: () => {},
 });
 
@@ -121,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const loadUser = useCallback((didRefresh = false) => {
-    const token = localStorage.getItem("access_token");
+    const token = getAccessTokenFromCookie();
     if (!token) {
       setLoading(false);
       return;
@@ -146,12 +138,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setLoading(false);
           return;
         }
-        // Token expired — attempt one silent refresh
-        void refreshTokens().then(() => loadUser(true));
         return;
       }
-
-      setAuthCookie(token);
       setUser(payload);
     } catch {
       localStorage.removeItem("access_token");
@@ -166,21 +154,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, [loadUser]);
 
-  // login
-  const login = useCallback((token: string) => {
-    localStorage.setItem("access_token", token);
-    setAuthCookie(token);
-
-    const payload = decodeJwt(token);
-
-    if (payload) {
-      setUser(payload);
-    }
-  }, []);
+  // reloadUser is a stable function that can be called to refresh the user state after login or token refresh
+  const reloadUser = useCallback(() => { loadUser(); }, [loadUser]);
 
   const logout = useCallback(() => {
-    // 1. Clear client-side storage immediately — don't wait for the API call
-    localStorage.removeItem("access_token");
     clearAuthCookie();
     setUser(null);
 
@@ -194,31 +171,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, reloadUser, logout }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
 export const useAuth = () => useContext(AuthContext);
-
-// ---------------------------------------------------------------------------
-// Token refresh (called internally when the access token has expired)
-// ---------------------------------------------------------------------------
-
-async function refreshTokens(): Promise<void> {
-  const res = await fetch(apiUrl("/auth/refresh"), {
-    method: "POST",
-    credentials: "include",
-  });
-
-  if (!res.ok) {
-    localStorage.removeItem("access_token");
-    clearAuthCookie();
-    return;
-  }
-
-  const { access_token } = await res.json();
-  localStorage.setItem("access_token", access_token);
-  setAuthCookie(access_token);
-}

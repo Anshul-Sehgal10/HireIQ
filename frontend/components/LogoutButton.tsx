@@ -16,9 +16,6 @@ export default function LogoutButton() {
     } catch (error) {
       console.error("Failed to call backend logout api:", error);
     } finally {
-      // Clear out any old local storage items just in case, then refresh and redirect
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
       clearAuthCookie(); // Clear the auth cookie
       router.refresh(); // Tells Next.js to drop the page cache and read empty cookies
       router.push('/auth/login');

@@ -13,3 +13,14 @@ export function apiUrl(path: string): string {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return `${getApiBaseUrl()}${normalizedPath}`;
 }
+
+export function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  return fetch(apiUrl(path), {
+    ...options,
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...options?.headers,
+    },
+  });
+}

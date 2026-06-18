@@ -10,20 +10,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
-
-function apiFetch(path: string, options?: RequestInit) {
-  const token = localStorage.getItem("access_token");
-  return fetch(`${API}${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      ...options?.headers,
-    },
-  });
-}
+import { apiFetch } from "@/lib/api"
 
 type State = "loading" | "confirm" | "accepting" | "success" | "error";
 

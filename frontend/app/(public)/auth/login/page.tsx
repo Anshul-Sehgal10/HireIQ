@@ -5,42 +5,44 @@ import OAuthButtons from "@/components/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api";
-import { useAuth, setAuthCookie } from "@/context/auth";
+import { useAuth } from "@/context/auth";
+
+function getAccessTokenFromCookie(): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie
+    .split("; ")
+    .find((row) => row.startsWith("access_token="));
+  return match ? match.split("=").slice(1).join("=") : null;
+}
 
 function decodeJwtPayload(token: string): { role?: string } | null {
   try {
-    const payloadBase64Url = token.split(".")[1];
-    if (!payloadBase64Url) return null;
-
-    let payloadBase64 = payloadBase64Url.replace(/-/g, "+").replace(/_/g, "/");
-    while (payloadBase64.length % 4) {
-      payloadBase64 += "=";
-    }
-
-    return JSON.parse(window.atob(payloadBase64)) as { role?: string };
+    let b64 = token.split(".")[1];
+    if (!b64) return null;
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    return JSON.parse(atob(b64)) as { role?: string };
   } catch {
     return null;
   }
 }
 
-function persistSession(accessToken: string) {
-  localStorage.setItem("access_token", accessToken);
-}
-
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { reloadUser } = useAuth();
   const router = useRouter();
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setLoading(true);
 
     try {
       const res = await fetch(apiUrl("/auth/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        credentials: "include",
+        credentials: "include",   // browser stores the Set-Cookie headers
         body: JSON.stringify({ email, password }),
       });
 
@@ -50,33 +52,34 @@ export default function LoginPage() {
         return;
       }
 
-      const data = await res
-        .json()
-        .catch(() => ({}) as { access_token?: string });
-
-      if (data.access_token) {
-        // persistSession(data.access_token);
-        login(data.access_token);
-        setAuthCookie(data.access_token);
-
-        const decodedPayload = decodeJwtPayload(data.access_token);
-        const userRole = decodedPayload?.role?.toLowerCase() || null;
-
-        if (userRole) {
-          router.replace(`/dashboard/${userRole}`);
-        } else {
-          alert("Could not resolve user role from security token.");
-        }
-      } else if (!data.access_token) {
-        alert("Login response did not contain an access token.");
+      // Token is now in the cookie set by the backend.
+      // Read it directly — no JSON body, no localStorage.
+      const token = getAccessTokenFromCookie();
+      if (!token) {
+        alert("Login succeeded but no session cookie was set. Check CORS + credentials config.");
         return;
       }
+
+      const payload = decodeJwtPayload(token);
+      const role = payload?.role?.toLowerCase();
+      if (!role) {
+        alert("Could not resolve user role from token.");
+        return;
+      }
+
+      // Sync auth context with the new cookie state
+      reloadUser();
+      router.replace(`/dashboard/${role}`);
+
     } catch (error) {
-      console.error("Request error:", error);
+      console.error("Login error:", error);
       alert("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  // ... rest of JSX unchanged
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
       <div className="w-full max-w-md space-y-8 rounded-xl bg-white p-8 shadow-md">

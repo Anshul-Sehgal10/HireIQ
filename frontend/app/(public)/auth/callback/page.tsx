@@ -20,11 +20,7 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { setAuthCookie } from "@/context/auth";
-
-function persistSession(accessToken: string) {
-  localStorage.setItem("access_token", accessToken);
-}
+import { getAccessTokenFromCookie } from "@/context/auth";
 
 /** Safely decodes a base64url-encoded JWT segment (handles padding and char substitution). */
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -44,53 +40,30 @@ export default function OAuthCallbackPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const accessToken = params.get("access_token");
     const error = params.get("error");
 
-    console.log("[OAuth Callback Page] Mounted. params:", { 
-      hasAccess: !!accessToken, 
-      error 
-    });
-
     if (error) {
-      console.error("[OAuth Callback Page] Error in params:", error);
       router.replace("/auth/login?error=" + error);
       return;
     }
 
-    if (!accessToken) {
-      console.error("[OAuth Callback Page] Missing access token in params");
-      router.replace("/auth/login?error=missing_tokens");
+    // Token is already in the cookie — just decode it to get the role
+    const token = getAccessTokenFromCookie();
+    if (!token) {
+      router.replace("/auth/login?error=missing_token");
       return;
     }
 
-    // Persist tokens — same storage strategy as email/password login
-    console.log("[OAuth Callback Page] Persisting tokens to localStorage...");
-    persistSession(accessToken);
-
-    // Set the frontend-domain cookie so the Next.js middleware can enforce
-    // role-based route protection on /dashboard/* routes.
-    console.log("[OAuth Callback Page] Setting frontend-domain auth cookie...");
-    setAuthCookie(accessToken);
-
-    const payload = decodeJwtPayload(accessToken);
-    console.log("[OAuth Callback Page] Decoded payload:", payload);
+    const payload = decodeJwtPayload(token);
     if (!payload) {
-      console.error("[OAuth Callback Page] Failed to decode JWT payload");
       router.replace("/auth/login?error=invalid_token");
       return;
     }
 
-    const role = typeof payload.role === "string" ? payload.role.toLowerCase() : null;
-    console.log("[OAuth Callback Page] Resolved role:", role);
-
-    // Clear tokens from URL immediately — they're persisted in storage now
+    const role =
+      typeof payload.role === "string" ? payload.role.toLowerCase() : null;
     window.history.replaceState({}, "", "/auth/callback");
-
-    let destination = `/dashboard/${role?.toLowerCase() || "candidate"}`;
-
-    console.log("[OAuth Callback Page] Replacing router history with destination:", destination);
-    router.replace(destination);
+    router.replace(`/dashboard/${role ?? "candidate"}`);
   }, [router]);
 
   return (

@@ -32,6 +32,22 @@ def set_refresh_cookie(response: Response, refresh_token: str):
         max_age=60 * 60 * 24 * 30,  # 30 days
     )
 
+# Add this helper alongside set_refresh_cookie:
+
+def set_access_cookie(response: Response, access_token: str):
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=False,          # JS-readable — middleware and useAuth need to decode it
+        secure=not settings.DEBUG,
+        samesite="lax",
+        path="/",
+        max_age=60 * settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+    )
+
+def clear_access_cookie(response: Response):
+    response.delete_cookie(key="access_token", path="/")
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     existing = await get_user_by_email(db, body.email)
@@ -48,7 +64,7 @@ async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(ge
     return {"message": "Account created."}
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 async def login(
     body: LoginRequest, 
     response: Response,  # Inject FastAPI response context to set headers
@@ -76,16 +92,16 @@ async def login(
         user_id=str(user.id)
     )
     
-    # 4. Set the refresh token in an HttpOnly cookie
+    # 4. Set the refresh token in an HttpOnly cookie and access token in a regular cookie
     set_refresh_cookie(response, refresh_token)
+    set_access_cookie(response, access_token)
     
     return {
-        "access_token": access_token,
-        "token_type": "bearer"
+        "message": "Login successful",
     }
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 async def refresh(
     response: Response,
     refresh_token: str | None = Cookie(default=None),
@@ -136,12 +152,12 @@ async def refresh(
         user_id=str(user.id)
     )
 
-    # 4. Refresh the cookie with the updated token values
+    # 4. Refresh the cookies with the updated token values
     set_refresh_cookie(response, new_refresh_token)
+    set_access_cookie(response, new_access_token)
 
     return {
-        "access_token": new_access_token,
-        "token_type": "bearer",
+        "message": "Token refreshed successfully"
     }
 
 
@@ -152,9 +168,11 @@ async def me(user: CurrentUser):
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(response: Response):
+    # delete the refresh token cookie and clear the access token cookie
     response.delete_cookie(
         key="refresh_token",
         path="/"
     )
+    clear_access_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
