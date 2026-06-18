@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import OAuthButtons from "@/components/OAuthButtons";
 import { apiUrl } from "@/lib/api";
+import { getAccessTokenFromCookie, useAuth } from "@/context/auth";
 
 type RegisterRole = "candidate" | "employer";
 
@@ -15,8 +16,21 @@ interface RegisterRequest {
   role: RegisterRole;
 }
 
+function decodeJwtPayload(token: string): { role?: string } | null {
+  try {
+    let b64 = token.split(".")[1];
+    if (!b64) return null;
+    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
+    while (b64.length % 4) b64 += "=";
+    return JSON.parse(atob(b64)) as { role?: string };
+  } catch {
+    return null;
+  }
+}
+
 export default function SignupPage() {
   const router = useRouter();
+  const { reloadUser } = useAuth();
 
   // 1. Form States
   const [formData, setFormData] = useState<RegisterRequest>({
@@ -47,37 +61,25 @@ export default function SignupPage() {
     try {
       const response = await fetch(apiUrl("/auth/register"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",  // Ensure cookies are sent and received
         body: JSON.stringify(formData),
       });
 
       const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || "Registration failed.");
 
-      if (!response.ok) {
-        throw new Error(
-          data.detail || "Something went wrong during registration.",
-        );
-      }
+      // Same pattern as login — read cookie, decode role, redirect
+      const token = getAccessTokenFromCookie();
+      if (!token) throw new Error("No session cookie set after registration.");
 
-      // The register endpoint returns { message: "Account created." } — no token is issued. The current code sends the user straight to /dashboard/employer which the middleware immediately bounces back to login since there's no cookie.
-      // setSuccess(true);
-      // // Calculate the specific route based on the selected role state
-      // // Converts 'CANDIDATE' -> 'candidate' or 'EMPLOYER' -> 'employer'
-      // const targetRoleRoute = formData.role.toLowerCase();
+      const payload = decodeJwtPayload(token);
+      const role = payload?.role?.toLowerCase();
+      if (!role) throw new Error("Could not resolve role from token.");
 
-      // // Dynamic redirection delay to give the user success feedback
-      // setTimeout(() => {
-      //   router.push(`/dashboard/${targetRoleRoute}`);
-      // }, 1500);
-
-      // AFTER
       setSuccess(true);
-
-      setTimeout(() => {
-        router.push("/auth/login");
-      }, 1500);
+      reloadUser(); // sync auth context
+      router.replace(`/dashboard/${role}`);
     } catch (err: any) {
       setError(err.message || "Failed to connect to the server.");
     } finally {
@@ -243,7 +245,7 @@ export default function SignupPage() {
               <button
                 type="submit"
                 disabled={loading || success}
-                className="flex w-full justify-center rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 transition-colors disabled:opacity-50"
+                className="flex w-full justify-center rounded-lg bg-emerald-600 px-3 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600 transition-colors disabled:opacity-50"
               >
                 {loading ? (
                   <span className="flex items-center gap-2">

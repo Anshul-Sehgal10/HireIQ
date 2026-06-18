@@ -49,7 +49,11 @@ def clear_access_cookie(response: Response):
     response.delete_cookie(key="access_token", path="/")
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(get_db)]):
+async def register(
+    body: RegisterRequest,
+    response: Response,                          # add this
+    db: Annotated[AsyncSession, Depends(get_db)]
+):
     existing = await get_user_by_email(db, body.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -58,8 +62,16 @@ async def register(body: RegisterRequest, db: Annotated[AsyncSession, Depends(ge
         "email": body.email,
         "hashed_password": hash_password(body.password),
         "full_name": body.full_name,
-        "role": body.role,   # CANDIDATE or EMPLOYER
+        "role": body.role,
     })
+
+    # Issue tokens immediately — same logic as /login
+    user_data = {"email": user.email, "full_name": user.full_name}
+    access_token = create_access_token(str(user.id), user.role.value, user_data)
+    refresh_token = create_refresh_token(str(user.id))
+
+    set_refresh_cookie(response, refresh_token)
+    set_access_cookie(response, access_token)
 
     return {"message": "Account created."}
 
@@ -125,6 +137,12 @@ async def refresh(
             status_code=401,
             detail="Invalid or expired refresh token"
         )
+    
+    # Check if token's jti is blacklisted (i.e. revoked)
+    from app.repositories.token_repo import is_blacklisted
+    jti = payload.get("jti")
+    if jti and await is_blacklisted(db, jti):
+        raise HTTPException(status_code=401, detail="Token has been revoked")
 
     # 1. Fetch user from DB using the 'sub' claim
     user = await get_user_by_id(db, payload["sub"])
@@ -167,12 +185,23 @@ async def me(user: CurrentUser):
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-async def logout(response: Response):
-    # delete the refresh token cookie and clear the access token cookie
-    response.delete_cookie(
-        key="refresh_token",
-        path="/"
-    )
+async def logout(
+    response: Response,
+    refresh_token: str | None = Cookie(),
+    db: Annotated[AsyncSession, Depends(get_db)] = None, #type: ignore
+):
+    if refresh_token:
+        try:
+            payload = decode_token(refresh_token)
+            jti = payload.get("jti")
+            exp = payload.get("exp")
+            if jti and exp:
+                from datetime import datetime, timezone
+                from app.repositories.token_repo import blacklist_token
+                expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
+                await blacklist_token(db, jti, expires_at)
+        except Exception:
+            pass  # even if decoding fails, still clear the cookies
+
+    response.delete_cookie(key="refresh_token", path="/")
     clear_access_cookie(response)
-    response.status_code = status.HTTP_204_NO_CONTENT
-    return response

@@ -16,6 +16,7 @@ from .scenario import ScenarioQuestion, ScenarioResponse
 from .organization import Organization, SubscriptionTier, VerificationStatus
 from .org_members import OrgMember, OrgRole
 from .org_invites import OrgInvite, InviteDirection, InviteStatus
+from .token_blacklist import BlacklistedToken
 from .user import (
     OAuthProvider,
     User,
@@ -59,4 +60,6 @@ __all__ = [
     # Observability & Billing
     "AuditLog",
     "TokenUsageLog",
+    # Token Blacklist
+    "BlacklistedToken",
 ]

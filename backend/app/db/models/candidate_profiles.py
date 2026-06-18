@@ -46,7 +46,12 @@ class CandidateProfile(UUIDMixin, TimestampMixin, Base):
     # Current active resume (denormalised pointer for fast matching)
     current_resume_version_id: Mapped[Optional[uuid.UUID]] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("resume_versions.id", ondelete="SET NULL"),
+        ForeignKey(
+            "resume_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,  # to avoid circular dependency with ResumeVersion.candidate_id FK
+            name="fk_candidate_profile_current_resume", # custom FK name for clarity in migrations
+        ),
         nullable=True,
     )
 
