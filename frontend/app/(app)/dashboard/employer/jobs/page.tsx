@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { RoleGuard } from "@/components/RoleGuard";
+import { apiUrl } from "@/lib/api";
 
 interface Job {
   id: string;
@@ -14,14 +15,13 @@ interface Job {
 }
 
 // Global configuration wrapper matching FastAPI endpoint path architecture
-async function apiFetch(path: string, options?: RequestInit) {
-  const BACKEND_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  
-  return fetch(`${BACKEND_URL}${path}`, {
+function apiFetch(path: string, options?: RequestInit) {
+  const token = localStorage.getItem("access_token");
+  return fetch(apiUrl(path), {
     ...options,
-    credentials: "include", // Forwards secure cookies automatically to FastAPI
     headers: {
       "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
       ...options?.headers,
     },
   });
@@ -30,9 +30,9 @@ async function apiFetch(path: string, options?: RequestInit) {
 export default function EmployerJobsPage() {
   return (
     // Re-integrated RoleGuard to enforce client-side UI permission locks
-    // <RoleGuard allowed={["employer", "admin"]}>
-    // </RoleGuard>
+    <RoleGuard allowed={["employer", "admin"]}>
       <JobsContent />
+    </RoleGuard>
   );
 }
 

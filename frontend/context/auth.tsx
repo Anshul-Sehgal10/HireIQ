@@ -83,7 +83,12 @@ function decodeJwt(token: string): AuthUser | null {
     const payload = JSON.parse(atob(payloadBase64));
     if (!payload.sub || !payload.role || !payload.exp) return null;
 
-    return { id: payload.sub, full_name: payload.full_name, role: payload.role, exp: payload.exp };
+    return {
+      id: payload.sub,
+      full_name: payload.full_name,
+      role: payload.role,
+      exp: payload.exp,
+    };
   } catch {
     return null;
   }
@@ -113,7 +118,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUser = useCallback(() => {
+  const loadUser = useCallback((didRefresh = false) => {
     const token = localStorage.getItem("access_token");
     if (!token) {
       setLoading(false);
@@ -124,25 +129,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const payload = decodeJwt(token);
       if (!payload) {
         localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
         clearAuthCookie();
         setUser(null);
+        setLoading(false);
         return;
       }
 
       if (payload.exp * 1000 < Date.now()) {
-        // Token expired — try to silently refresh
-        void refreshTokens().then(() => loadUser());
+        if (didRefresh) {
+          // Already tried refreshing once — give up and force re-login
+          localStorage.removeItem("access_token");
+          clearAuthCookie();
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+        // Token expired — attempt one silent refresh
+        void refreshTokens().then(() => loadUser(true));
         return;
       }
 
-      // Token is valid — keep the middleware cookie in sync with the same TTL
       setAuthCookie(token);
       setUser(payload);
     } catch {
       localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
       clearAuthCookie();
+      setUser(null);
     } finally {
       setLoading(false);
     }

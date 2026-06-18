@@ -119,7 +119,5 @@ class Application(UUIDMixin, Base):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<Application job={self.job_id} candidate={self.candidate_id} "
-            f"status={self.status} score={self.match_score:.2f}>"
-        )
+        score_str = f"{self.match_score:.2f}" if self.match_score is not None else "N/A"
+        return f"<Application job={self.job_id} candidate={self.candidate_id} status={self.status} score={score_str}>"

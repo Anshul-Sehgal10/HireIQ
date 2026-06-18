@@ -51,9 +51,9 @@ const ROLE_BADGE: Record<string, string> = {
 
 export default function OrgPage() {
   return (
-    // <RoleGuard allowed={["employer", "admin"]}>
-    // </RoleGuard>
+    <RoleGuard allowed={["employer", "admin"]}>
       <OrgContent />
+    </RoleGuard>
   );
 }
 
