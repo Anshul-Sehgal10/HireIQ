@@ -5,11 +5,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import {
-  PanelLeftClose,
-  PanelLeftOpen,
-  UserCircle,
-} from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, UserCircle } from "lucide-react";
 
 import { NAVIGATION } from "@/lib/navigation";
 import { useSidebar } from "@/context/sidebar";
@@ -40,21 +36,10 @@ export default function Sidebar() {
     >
       {/* Header */}
       <div className="flex h-16 items-center justify-between border-b px-4">
-        {open && (
-          <div className="font-bold text-xl">
-            HireIQ
-          </div>
-        )}
+        {open && <div className="font-bold text-xl">HireIQ</div>}
 
-        <button
-          onClick={toggle}
-          className="rounded-md p-2 hover:bg-muted"
-        >
-          {open ? (
-            <PanelLeftClose size={18} />
-          ) : (
-            <PanelLeftOpen size={18} />
-          )}
+        <button onClick={toggle} className="rounded-md p-2 hover:bg-muted">
+          {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
         </button>
       </div>
 
@@ -64,8 +49,7 @@ export default function Sidebar() {
           const Icon = item.icon;
 
           const active =
-            pathname === item.href ||
-            pathname.startsWith(item.href + "/");
+            pathname === item.href || pathname.startsWith(item.href + "/");
 
           return (
             <Link
@@ -88,9 +72,7 @@ export default function Sidebar() {
             >
               <Icon size={18} />
 
-              {open && (
-                <span>{item.label}</span>
-              )}
+              {open && <span>{item.label}</span>}
             </Link>
           );
         })}
@@ -118,9 +100,7 @@ export default function Sidebar() {
                 {user.full_name ?? "Profile"}
               </span>
 
-              <span className="text-xs text-muted-foreground">
-                {user.role}
-              </span>
+              <span className="text-xs text-muted-foreground">{user.role}</span>
             </div>
           )}
         </Link>

@@ -20,8 +20,8 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 const ROLE_ROUTES: Record<string, string[]> = {
-  "/dashboard/admin": ["admin"],
-  "/dashboard/employer": ["employer", "admin"],
+  "/dashboard/admin":     ["admin"],
+  "/dashboard/employer":  ["employer", "admin"],
   "/dashboard/candidate": ["candidate", "admin"],
   "/onboarding":          ["employer", "candidate", "admin"],
   // Add more role-based routes here as needed. Eg -

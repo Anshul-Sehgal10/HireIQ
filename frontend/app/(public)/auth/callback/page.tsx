@@ -87,9 +87,7 @@ export default function OAuthCallbackPage() {
     // Clear tokens from URL immediately — they're persisted in storage now
     window.history.replaceState({}, "", "/auth/callback");
 
-    let destination = "/dashboard/candidate";
-    if (role === "admin") destination = "/dashboard/admin";
-    else if (role === "employer") destination = "/dashboard/employer";
+    let destination = `/dashboard/${role?.toLowerCase() || "candidate"}`;
 
     console.log("[OAuth Callback Page] Replacing router history with destination:", destination);
     router.replace(destination);

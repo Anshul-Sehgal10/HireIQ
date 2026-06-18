@@ -5,7 +5,7 @@ import OAuthButtons from "@/components/OAuthButtons";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiUrl } from "@/lib/api";
-import { setAuthCookie } from "@/context/auth";
+import { useAuth, setAuthCookie } from "@/context/auth";
 
 function decodeJwtPayload(token: string): { role?: string } | null {
   try {
@@ -28,6 +28,7 @@ function persistSession(accessToken: string) {
 }
 
 export default function LoginPage() {
+  const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -54,8 +55,8 @@ export default function LoginPage() {
         .catch(() => ({}) as { access_token?: string });
 
       if (data.access_token) {
-        persistSession(data.access_token);
-
+        // persistSession(data.access_token);
+        login(data.access_token);
         setAuthCookie(data.access_token);
 
         const decodedPayload = decodeJwtPayload(data.access_token);

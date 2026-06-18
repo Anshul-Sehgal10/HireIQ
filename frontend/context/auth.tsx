@@ -101,12 +101,14 @@ function decodeJwt(token: string): AuthUser | null {
 interface AuthCtx {
   user: AuthUser | null;
   loading: boolean;
+  login: (token: string) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null,
   loading: true,
+  login: () => {},
   logout: () => {},
 });
 
@@ -164,6 +166,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadUser();
   }, [loadUser]);
 
+  // login
+  const login = useCallback((token: string) => {
+    localStorage.setItem("access_token", token);
+    setAuthCookie(token);
+
+    const payload = decodeJwt(token);
+
+    if (payload) {
+      setUser(payload);
+    }
+  }, []);
+
   const logout = useCallback(() => {
     // 1. Clear client-side storage immediately — don't wait for the API call
     localStorage.removeItem("access_token");
@@ -180,7 +194,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
