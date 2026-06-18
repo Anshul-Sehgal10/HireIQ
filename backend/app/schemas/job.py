@@ -1,3 +1,4 @@
+from uuid import UUID
 from typing import Optional
 from pydantic import BaseModel, Field
 from app.db.models.job import JobStatus, WorkMode, JobLevel
@@ -27,8 +28,8 @@ class JobUpdate(BaseModel):
     match_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 class JobResponse(BaseModel):
-    id: str
-    org_id: str
+    id: UUID
+    org_id: UUID
     title: str
     description: str
     status: JobStatus

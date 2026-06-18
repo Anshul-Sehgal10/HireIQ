@@ -46,16 +46,24 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     domain: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     verification_status: Mapped[VerificationStatus] = mapped_column(
-        Enum(VerificationStatus, name="verification_status_enum"),
-        nullable=False,
-        default=VerificationStatus.PENDING,
-        server_default=VerificationStatus.PENDING.value,
+    Enum(
+        VerificationStatus,
+        values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        name="verification_status_enum",
+    ),
+    nullable=False,
+    default=VerificationStatus.PENDING,
+    server_default="pending",
     )
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
-        Enum(SubscriptionTier, name="org_subscription_tier_enum"),
-        nullable=False,
-        default=SubscriptionTier.FREE,
-        server_default=SubscriptionTier.FREE.value,
+    Enum(
+        SubscriptionTier,
+        values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        name="org_subscription_tier_enum",
+    ),
+    nullable=False,
+    default=SubscriptionTier.FREE,
+    server_default=SubscriptionTier.FREE.value,
     )
     token_budget: Mapped[int] = mapped_column(Integer, default=100_000, server_default="100000")
     tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")

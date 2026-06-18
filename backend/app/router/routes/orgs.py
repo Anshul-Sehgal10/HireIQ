@@ -99,9 +99,9 @@ async def list_members(
     for m in members:
         u = await db.get(User, m.user_id)
         result.append(OrgMemberResponse(
-            id=str(m.id),
-            user_id=str(m.user_id),
-            org_id=str(m.org_id),
+            id=m.id,
+            user_id=m.user_id,
+            org_id=m.org_id,
             role=m.role,
             email=u.email if u else None,
             full_name=u.full_name if u else None,
@@ -224,9 +224,9 @@ async def accept_invite(
     member = await org_repo.accept_invite(db, invite, user.id)
     u = await db.get(User, member.user_id)
     return OrgMemberResponse(
-        id=str(member.id),
-        user_id=str(member.user_id),
-        org_id=str(member.org_id),
+        id=member.id,
+        user_id=member.user_id,
+        org_id=member.org_id,
         role=member.role,
         email=u.email if u else None,
         full_name=u.full_name if u else None,
@@ -309,9 +309,9 @@ async def approve_request(
     member = await org_repo.approve_request(db, req)
     u = await db.get(User, member.user_id)
     return OrgMemberResponse(
-        id=str(member.id),
-        user_id=str(member.user_id),
-        org_id=str(member.org_id),
+        id=member.id,
+        user_id=member.user_id,
+        org_id=member.org_id,
         role=member.role,
         email=u.email if u else None,
         full_name=u.full_name if u else None,

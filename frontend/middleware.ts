@@ -23,6 +23,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   "/dashboard/admin": ["admin"],
   "/dashboard/employer": ["employer", "admin"],
   "/dashboard/candidate": ["candidate", "admin"],
+  "/onboarding":          ["employer", "candidate", "admin"],
   // Add more role-based routes here as needed. Eg -
   // "/onboarding":          ["employer", "candidate"],
   // "/apply":               ["candidate"],
@@ -90,5 +91,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*"],
+  matcher: ["/dashboard/:path*, /onboarding/:path*"],
 };

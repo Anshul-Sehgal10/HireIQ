@@ -37,6 +37,7 @@ import { apiUrl } from "@/lib/api";
  * Expiry is derived from the token's own `exp` claim so the cookie and the
  * token expire together. Falls back to 15 minutes if decoding fails.
  */
+
 export function setAuthCookie(token: string) {
   try {
     let b64 = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
@@ -64,6 +65,7 @@ export function clearAuthCookie() {
 
 interface AuthUser {
   id: string;
+  full_name: string;
   role: "admin" | "employer" | "candidate";
   exp: number;
 }
@@ -81,7 +83,7 @@ function decodeJwt(token: string): AuthUser | null {
     const payload = JSON.parse(atob(payloadBase64));
     if (!payload.sub || !payload.role || !payload.exp) return null;
 
-    return { id: payload.sub, role: payload.role, exp: payload.exp };
+    return { id: payload.sub, full_name: payload.full_name, role: payload.role, exp: payload.exp };
   } catch {
     return null;
   }

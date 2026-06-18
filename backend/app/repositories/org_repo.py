@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
 from sqlalchemy import select, and_
+from sqlalchemy.orm import noload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.org_invites import InviteDirection, InviteStatus, OrgInvite
@@ -38,13 +39,18 @@ async def create_org(
 
 
 async def get_org_by_id(db: AsyncSession, org_id: uuid.UUID) -> Optional[Organization]:
-    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    result = await db.execute(
+        select(Organization)
+        .options(noload(Organization.invites))
+        .where(Organization.id == org_id)
+    )
     return result.scalar_one_or_none()
 
 
 async def get_org_for_user(db: AsyncSession, user_id: uuid.UUID) -> Optional[Organization]:
     result = await db.execute(
         select(Organization)
+        .options(noload(Organization.invites))
         .join(OrgMember, OrgMember.org_id == Organization.id)
         .where(OrgMember.user_id == user_id)
     )

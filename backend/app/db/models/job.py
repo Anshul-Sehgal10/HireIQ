@@ -93,16 +93,32 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
     jd_embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
 
     status: Mapped[JobStatus] = mapped_column(
-        Enum(JobStatus, name="job_status_enum"),
-        nullable=False,
-        default=JobStatus.DRAFT,
-        server_default=JobStatus.DRAFT.value,
+    Enum(
+        JobStatus,
+        values_callable=lambda enum_cls: [e.value for e in enum_cls],
+        name="job_status_enum",
+    ),
+    nullable=False,
+    default=JobStatus.DRAFT,
+    server_default=JobStatus.DRAFT.value,
     )
+    
     work_mode: Mapped[Optional[WorkMode]] = mapped_column(
-        Enum(WorkMode, name="work_mode_enum"), nullable=True
+        Enum(
+            WorkMode,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            name="work_mode_enum",
+        ),
+        nullable=True,
     )
+    
     job_level: Mapped[Optional[JobLevel]] = mapped_column(
-        Enum(JobLevel, name="job_level_enum"), nullable=True
+        Enum(
+            JobLevel,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            name="job_level_enum",
+        ),
+        nullable=True,
     )
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     salary_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
