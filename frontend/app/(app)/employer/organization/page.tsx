@@ -1,10 +1,10 @@
 "use client";
-
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { RoleGuard } from "@/components/RoleGuard";
-import { apiFetch } from "@/lib/api"
+import { apiFetch } from "@/lib/api";
+import { getAccessTokenFromCookie } from "@/context/auth";
 
 interface Org {
   id: string;
@@ -31,9 +31,9 @@ interface Invite {
 }
 
 const ROLE_BADGE: Record<string, string> = {
-  owner:     "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  owner: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
   recruiter: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  viewer:    "bg-slate-500/15 text-slate-400 border-slate-500/30",
+  viewer: "bg-slate-500/15 text-slate-400 border-slate-500/30",
 };
 
 export default function OrgPage() {
@@ -54,19 +54,25 @@ function OrgContent() {
 
   // Invite form
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<"recruiter" | "viewer">("recruiter");
+  const [inviteRole, setInviteRole] = useState<"recruiter" | "viewer">(
+    "recruiter",
+  );
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
 
-  // Decode current user id from token
   const currentUserId = (() => {
     try {
-      const t = localStorage.getItem("access_token") ?? "";
-      let b64 = t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const token = getAccessTokenFromCookie();
+      if (!token) return null;
+      let b64 = token.split(".")[1];
+      if (!b64) return null;
+      b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
       while (b64.length % 4) b64 += "=";
-      return JSON.parse(atob(b64)).sub as string;
-    } catch { return null; }
+      return (JSON.parse(atob(b64)) as { sub: string }).sub;
+    } catch {
+      return null;
+    }
   })();
 
   const isOwner = org ? org.owner_id === currentUserId : false;
@@ -96,7 +102,8 @@ function OrgContent() {
 
   const sendInvite = async () => {
     if (!inviteEmail.trim()) return;
-    setInviteLoading(true); setInviteError(null);
+    setInviteLoading(true);
+    setInviteError(null);
     try {
       const res = await apiFetch("/orgs/invites/", {
         method: "POST",
@@ -126,7 +133,9 @@ function OrgContent() {
   };
 
   const approveRequest = async (id: string) => {
-    const res = await apiFetch(`/orgs/mine/requests/${id}/approve`, { method: "POST" });
+    const res = await apiFetch(`/orgs/mine/requests/${id}/approve`, {
+      method: "POST",
+    });
     if (res.ok) {
       const member: Member = await res.json();
       setMembers((prev) => [...prev, member]);
@@ -142,7 +151,9 @@ function OrgContent() {
   if (loading) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-slate-400 animate-pulse text-sm">Loading workspace…</p>
+        <p className="text-slate-400 animate-pulse text-sm">
+          Loading workspace…
+        </p>
       </div>
     );
   }
@@ -154,8 +165,11 @@ function OrgContent() {
       {/* Top bar */}
       <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Link href="/dashboard/employer" className="text-slate-500 hover:text-slate-300 text-sm">
-            ← Dashboard
+          <Link
+            href="/employer/dashboard"
+            className="text-slate-500 hover:text-slate-300 text-sm"
+          >
+            Dashboard
           </Link>
           <span className="text-slate-700">|</span>
           <div>
@@ -164,23 +178,26 @@ function OrgContent() {
               <p className="text-xs text-slate-500">{org.domain}</p>
             )}
           </div>
-          <span className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize
-            ${org.verification_status === "verified"
-              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
-              : "bg-yellow-500/10 text-yellow-400 border-yellow-500/25"}`}>
+          <span
+            className={`text-xs px-2 py-0.5 rounded-full border font-medium capitalize
+            ${
+              org.verification_status === "verified"
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/25"
+                : "bg-yellow-500/10 text-yellow-400 border-yellow-500/25"
+            }`}
+          >
             {org.verification_status}
           </span>
         </div>
         <Link
-          href="/dashboard/employer/jobs"
+          href="/employer/jobs"
           className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
         >
-          Job postings →
+          Job postings
         </Link>
       </header>
 
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
-
         {/* Members */}
         <section>
           <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
@@ -197,18 +214,24 @@ function OrgContent() {
                     {(m.full_name ?? m.email ?? "?")[0].toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-white">{m.full_name ?? "—"}</p>
+                    <p className="text-sm font-medium text-white">
+                      {m.full_name ?? "—"}
+                    </p>
                     <p className="text-xs text-slate-400">{m.email}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${ROLE_BADGE[m.role] ?? ROLE_BADGE.viewer}`}>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full border font-medium capitalize ${ROLE_BADGE[m.role] ?? ROLE_BADGE.viewer}`}
+                  >
                     {m.role}
                   </span>
                   {isOwner && m.user_id !== currentUserId && (
                     <button
                       onClick={async () => {
-                        await apiFetch(`/orgs/mine/members/${m.user_id}`, { method: "DELETE" });
+                        await apiFetch(`/orgs/mine/members/${m.user_id}`, {
+                          method: "DELETE",
+                        });
                         setMembers((prev) => prev.filter((x) => x.id !== m.id));
                       }}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors"
@@ -262,12 +285,21 @@ function OrgContent() {
               {/* Pending invites */}
               {invites.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-slate-800">
-                  <p className="text-xs text-slate-500 font-medium">Pending invites</p>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Pending invites
+                  </p>
                   {invites.map((inv) => (
-                    <div key={inv.id} className="flex items-center justify-between py-2">
+                    <div
+                      key={inv.id}
+                      className="flex items-center justify-between py-2"
+                    >
                       <div>
-                        <span className="text-sm text-slate-200">{inv.invited_email}</span>
-                        <span className="ml-2 text-xs text-slate-500 capitalize">{inv.role}</span>
+                        <span className="text-sm text-slate-200">
+                          {inv.invited_email}
+                        </span>
+                        <span className="ml-2 text-xs text-slate-500 capitalize">
+                          {inv.role}
+                        </span>
                       </div>
                       <div className="flex items-center gap-3">
                         {inv.token && (
@@ -275,7 +307,9 @@ function OrgContent() {
                             onClick={() => copyInviteLink(inv.token!)}
                             className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
                           >
-                            {copiedToken === inv.token ? "Copied!" : "Copy link"}
+                            {copiedToken === inv.token
+                              ? "Copied!"
+                              : "Copy link"}
                           </button>
                         )}
                         <button
@@ -307,7 +341,9 @@ function OrgContent() {
                 >
                   <div>
                     <p className="text-sm text-white">{req.invited_email}</p>
-                    <p className="text-xs text-slate-500 mt-0.5">Wants to join as {req.role}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Wants to join as {req.role}
+                    </p>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -331,9 +367,15 @@ function OrgContent() {
 
         {/* Org ID for sharing */}
         <section className="border-t border-slate-800 pt-8">
-          <p className="text-xs text-slate-600 mb-1 uppercase tracking-widest font-semibold">Organisation ID</p>
-          <p className="text-xs font-mono text-slate-500 select-all break-all">{org.id}</p>
-          <p className="text-xs text-slate-600 mt-1">Share this with colleagues who want to send a join request.</p>
+          <p className="text-xs text-slate-600 mb-1 uppercase tracking-widest font-semibold">
+            Organisation ID
+          </p>
+          <p className="text-xs font-mono text-slate-500 select-all break-all">
+            {org.id}
+          </p>
+          <p className="text-xs text-slate-600 mt-1">
+            Share this with colleagues who want to send a join request.
+          </p>
         </section>
       </div>
     </div>

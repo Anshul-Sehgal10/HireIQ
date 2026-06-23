@@ -69,7 +69,7 @@ export default function LoginPage() {
 
       // Sync auth context with the new cookie state
       reloadUser();
-      router.replace(`/dashboard/${role}`);
+      router.replace(`/${role}/dashboard`);
 
     } catch (error) {
       console.error("Login error:", error);

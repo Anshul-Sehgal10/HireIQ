@@ -78,7 +78,7 @@ export default async function EmployerDashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <Link
-            href="/dashboard/employer/jobs"
+            href="/employer/jobs"
             className="bg-slate-800 border border-slate-700 hover:border-emerald-500/50 rounded-xl p-6 group transition-colors"
           >
             <div className="text-2xl mb-2">📋</div>
@@ -89,7 +89,7 @@ export default async function EmployerDashboard() {
           </Link>
 
           <Link
-            href="/dashboard/employer/org"
+            href="/employer/organization"
             className="bg-slate-800 border border-slate-700 hover:border-blue-500/50 rounded-xl p-6 group transition-colors"
           >
             <div className="text-2xl mb-2">🏢</div>

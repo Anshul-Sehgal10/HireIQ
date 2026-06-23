@@ -18,12 +18,12 @@ export const NAVIGATION: Record<string, NavItem[]> = {
   admin: [
     {
       label: "Dashboard",
-      href: "/dashboard/admin",
+      href: "/admin/dashboard",
       icon: LayoutDashboard,
     },
     {
       label: "Users",
-      href: "/dashboard/admin/users",
+      href: "/admin/users",
       icon: Users,
     },
   ],
@@ -31,17 +31,17 @@ export const NAVIGATION: Record<string, NavItem[]> = {
   employer: [
     {
       label: "Dashboard",
-      href: "/dashboard/employer",
+      href: "/employer/dashboard",
       icon: LayoutDashboard,
     },
     {
       label: "Jobs",
-      href: "/dashboard/employer/jobs",
+      href: "/employer/jobs",
       icon: Briefcase,
     },
     {
       label: "Organization",
-      href: "/dashboard/employer/org",
+      href: "/employer/organization",
       icon: Building2,
     },
   ],
@@ -49,12 +49,12 @@ export const NAVIGATION: Record<string, NavItem[]> = {
   candidate: [
     {
       label: "Dashboard",
-      href: "/dashboard/candidate",
+      href: "/candidate/dashboard",
       icon: LayoutDashboard,
     },
     {
       label: "Jobs",
-      href: "/jobs",
+      href: "/candidate/jobs",
       icon: Briefcase,
     },
   ],

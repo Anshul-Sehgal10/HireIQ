@@ -79,7 +79,7 @@ export default function SignupPage() {
 
       setSuccess(true);
       reloadUser(); // sync auth context
-      router.replace(`/dashboard/${role}`);
+      router.replace(`/${role}/dashboard`);
     } catch (err: any) {
       setError(err.message || "Failed to connect to the server.");
     } finally {

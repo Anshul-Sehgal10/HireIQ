@@ -63,7 +63,7 @@ export default function OAuthCallbackPage() {
     const role =
       typeof payload.role === "string" ? payload.role.toLowerCase() : null;
     window.history.replaceState({}, "", "/auth/callback");
-    router.replace(`/dashboard/${role ?? "candidate"}`);
+    router.replace(`/${role ?? "candidate"}/dashboard`);
   }, [router]);
 
   return (
