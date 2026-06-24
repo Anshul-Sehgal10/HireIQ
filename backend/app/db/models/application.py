@@ -83,7 +83,11 @@ class Application(UUIDMixin, Base):
 
     match_score: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     status: Mapped[ApplicationStatus] = mapped_column(
-        Enum(ApplicationStatus, name="application_status_enum"),
+        Enum(
+            ApplicationStatus,
+            name="application_status_enum",
+            values_callable=lambda enum_cls: [item.value for item in enum_cls],
+        ),
         nullable=False,
         default=ApplicationStatus.PENDING,
         server_default=ApplicationStatus.PENDING.value,

@@ -120,6 +120,10 @@ async def apply(
         db, profile.id, body.job_id
     )
     if existing:
+        if existing.status == ApplicationStatus.WITHDRAWN:
+            existing.status = ApplicationStatus.PENDING
+            await db.commit()
+            return existing
         raise HTTPException(400, "You have already applied to this job")
 
     # 4. Get or create a resume version (placeholder until upload is built)

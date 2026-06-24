@@ -86,7 +86,7 @@ async def create_application(
         candidate_id=candidate_id,
         resume_version_id=resume_version_id,
         match_score=match_score,
-        status=ApplicationStatus.PENDING,
+        status=ApplicationStatus.PENDING.value,
         is_override=is_override,
     )
     db.add(application)
