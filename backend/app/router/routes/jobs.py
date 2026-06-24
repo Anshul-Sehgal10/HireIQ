@@ -1,9 +1,10 @@
 from typing import List
 from uuid import UUID
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, logger, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import EmployerUser, CandidateUser, get_db
+from app.core.logging import logger
 from app.repositories.job_repo import (
     create_job, get_job, list_jobs_by_org,
     list_published_jobs, update_job, publish_job, close_job
@@ -29,14 +30,16 @@ async def create(
 
 @router.get("/mine", response_model=List[JobResponse])
 async def list_mine(user: EmployerUser, db: Annotated[AsyncSession, Depends(get_db)]):
+    logger.info("Fetching Organisation for user %s", user.full_name)
     org = await get_org_for_user(db, user.id)
+    logger.info(f"Listing jobs for user {user.full_name}, org: {org}")
     if not org:
         return []
     return await list_jobs_by_org(db, org.id)
 
 @router.get("/feed", response_model=List[JobResponse])
 async def feed(user: CandidateUser, db: Annotated[AsyncSession, Depends(get_db)]):
-    # Plain list for now — cosine ranking comes in step ③
+    # Plain list for now — cosine ranking comes in step 3
     return await list_published_jobs(db)
 
 @router.get("/{job_id}", response_model=JobResponse)
