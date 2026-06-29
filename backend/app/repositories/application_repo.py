@@ -65,7 +65,8 @@ async def list_applications_by_job(
         .where(Application.job_id == job_id)
         .order_by(Application.match_score.desc().nulls_last())
     )
-    return list(result.scalars().all())
+    return list(result.scalars().all()) 
+    # [<Application job_id, candidate_id, status=ApplicationStatus.PENDING score=N/A>]
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────
+  # PostgreSQL with pgvector extension
+  # ─────────────────────────────────────────────
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: hireiq_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-hireiq}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hireiq_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-hireiq}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hireiq} -d ${POSTGRES_DB:-hireiq}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─────────────────────────────────────────────
+  # pgAdmin 4
+  # UI at http://localhost:5050
+  # ─────────────────────────────────────────────
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: hireiq_pgadmin
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@hireiq.dev
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"        # single-user desktop mode
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./pgadmin-servers.json:/pgadmin4/servers.json:ro   # auto-registers the DB
+    ports:
+      - "5050:80"
+
+  # ─────────────────────────────────────────────
+  # FastAPI backend
+  # API at http://localhost:8000
+  # ─────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    container_name: hireiq_backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    environment:
+      # Override DATABASE_URL so it points to the 'db' service, not localhost
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-hireiq}:${POSTGRES_PASSWORD:-hireiq_dev}@db:5432/${POSTGRES_DB:-hireiq}
+    volumes:
+      - ./backend:/app        # live reload — mirrors your local files into the container
+    ports:
+      - "8000:8000"
+
+  # ─────────────────────────────────────────────
+  # Next.js frontend
+  # App at http://localhost:3000
+  # ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: hireiq_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      TURBOPACK: 0
+    command: npx next dev
+    volumes:
+      - ./frontend:/app       # live reload
+      - /app/node_modules     # keep container's node_modules, don't overwrite with host
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres_data:
+  pgadmin_data:

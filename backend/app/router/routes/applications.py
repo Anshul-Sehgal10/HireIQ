@@ -15,10 +15,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CandidateUser, EmployerUser, CurrentUser, get_db
+from app.core.logging import logger
+
 from app.db.models.application import ApplicationStatus
 from app.db.models.job import JobStatus
 from app.repositories import application_repo, job_repo
 from app.repositories.org_repo import get_org_for_user
+from app.repositories.user_repo import get_user_by_id
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
@@ -82,6 +85,8 @@ def _build_with_job_response(app, job, org) -> ApplicationWithJobResponse:
         id=app.id,
         job_id=app.job_id,
         candidate_id=app.candidate_id,
+        full_name=app.candidate_profile.full_name if app.candidate_profile else "Unknown",
+        email=app.candidate_profile.email if app.candidate_profile else "Unknown",
         status=app.status,
         match_score=app.match_score,
         is_override=app.is_override,
@@ -114,11 +119,13 @@ async def apply(
 
     # 2. Get candidate profile
     profile = await _get_candidate_profile(db, user.id)
+    logger.info(f"Candidate prfile: {profile}")
 
     # 3. Check for duplicate application
     existing = await application_repo.get_application_for_candidate_job(
         db, profile.id, body.job_id
     )
+    # if existing, allow re-apply if withdrawn, otherwise reject
     if existing:
         if existing.status == ApplicationStatus.WITHDRAWN:
             existing.status = ApplicationStatus.PENDING
@@ -190,7 +197,7 @@ async def get_mine(
         .where(Application.id == application_id)
     )
     app = result.unique().scalar_one_or_none()
-    return _build_with_job_response(app, app.job_posting, app.job_posting.organization)
+    return _build_with_job_response(app, app.job_posting, app.job_posting.organization) # type: ignore
 
 
 # ---------------------------------------------------------------------------
@@ -234,7 +241,12 @@ async def list_for_job(
     if not org or job.org_id != org.id:
         raise HTTPException(403, "Not your job")
 
-    return await application_repo.list_applications_by_job(db, job_id)
+    applications = await application_repo.list_applications_by_job(db, job_id)
+    # [<Application job_id, candidate_id, status=ApplicationStatus.PENDING score=N/A>]
+    for app in applications:
+        profile = await db.get(CandidateProfile, app.candidate_id)
+        logger.info(f"Candidate: {profile}")
+    return applications
 
 
 # Fix missing import at module level

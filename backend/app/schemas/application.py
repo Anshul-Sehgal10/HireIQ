@@ -13,6 +13,8 @@ class ApplicationResponse(BaseModel):
     id: UUID
     job_id: UUID
     candidate_id: UUID
+    full_name: str
+    email: str
     status: ApplicationStatus
     match_score: Optional[float]
     is_override: bool

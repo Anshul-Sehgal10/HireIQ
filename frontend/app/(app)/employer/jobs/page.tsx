@@ -17,10 +17,13 @@ interface Job {
 interface Application {
   id: string;
   job_id: string;
-  applicant_name?: string; // Adjust field names to match your exact ApplicationResponse schema
-  applicant_email?: string;
+  candidate_id: string;
+  full_name: string | null;
+  email: string | null;
   status: string;
-  created_at: string;
+  match_score: number | null;
+  is_override: boolean;
+  applied_at: string;
 }
 
 export default function EmployerJobsPage() {
@@ -181,9 +184,9 @@ function JobsContent() {
                 {applicants.map((app) => (
                   <div key={app.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/40 transition-colors">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{app.applicant_name || "Anonymous Applicant"}</h3>
-                      <p className="text-sm text-gray-500 mt-0.5">{app.applicant_email || "No email documented"}</p>
-                      <p className="text-xs text-gray-400 mt-2">Applied on {new Date(app.created_at).toLocaleDateString()}</p>
+                      <h3 className="font-semibold text-gray-900">{app.full_name || "Anonymous Applicant"}</h3>
+                      <p className="text-sm text-gray-500 mt-0.5">{app.email || "No email documented"}</p>
+                      <p className="text-xs text-gray-400 mt-2">Applied on {new Date(app.applied_at).toLocaleDateString()}</p>
                     </div>
                     <span className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
                       {app.status}
