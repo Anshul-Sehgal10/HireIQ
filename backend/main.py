@@ -11,6 +11,6 @@ if __name__ == "__main__":
         "app.main:app",
         host=settings.HOST,
         port=settings.PORT,
-        reload=True,       # auto-reload on file changes (dev only)
+        reload=settings.DEBUG,       # auto-reload on file changes (dev only)
         log_level="info",
     )

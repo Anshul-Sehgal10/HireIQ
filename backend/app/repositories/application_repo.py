@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting
+from app.db.models.user import User
 
 
 # ---------------------------------------------------------------------------
@@ -44,7 +45,7 @@ async def get_application_for_candidate_job(
 async def list_applications_by_candidate(
     db: AsyncSession, candidate_id: uuid.UUID
 ) -> List[Application]:
-    """All applications for a candidate, newest first, with job eagerly loaded."""
+    """All applications for a candidate, newest first, with job + org eagerly loaded."""
     result = await db.execute(
         select(Application)
         .options(
@@ -58,15 +59,22 @@ async def list_applications_by_candidate(
 
 async def list_applications_by_job(
     db: AsyncSession, job_id: uuid.UUID
-) -> List[Application]:
-    """All applications for a job posting (employer view), best match first."""
+) -> List[tuple]:
+    """
+    All applications for a job posting (employer view).
+
+    Returns a list of (Application, CandidateProfile, User) rows so the
+    route can build EmployerApplicationResponse without N+1 queries.
+    Ordered by match_score DESC (nulls last for when embeddings aren't run yet).
+    """
     result = await db.execute(
-        select(Application)
+        select(Application, CandidateProfile, User)
+        .join(CandidateProfile, CandidateProfile.id == Application.candidate_id)
+        .join(User, User.id == CandidateProfile.user_id)
         .where(Application.job_id == job_id)
         .order_by(Application.match_score.desc().nulls_last())
     )
-    return list(result.scalars().all()) 
-    # [<Application job_id, candidate_id, status=ApplicationStatus.PENDING score=N/A>]
+    return list(result.all()) #type: ignore
 
 
 # ---------------------------------------------------------------------------

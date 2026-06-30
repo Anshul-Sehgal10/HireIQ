@@ -90,3 +90,8 @@ secrets/
 # Local
 *.local
 *.local.*
+
+# Local file storage fallback (resumes, etc.) — dev artifacts, not source
+/storage/*
+!/storage/.gitkeep
+!/storage/README.md

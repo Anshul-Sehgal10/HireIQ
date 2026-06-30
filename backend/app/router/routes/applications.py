@@ -1,36 +1,35 @@
 """
 Application routes.
 
-POST   /applications/                        → candidate applies to a job
-GET    /applications/mine                    → candidate's own applications (with job info)
-GET    /applications/{application_id}        → get single application
+POST   /applications/                          → candidate applies to a job
+GET    /applications/mine                      → candidate's own applications (with job info)
+GET    /applications/mine/{application_id}     → single application (candidate)
 POST   /applications/{application_id}/withdraw → candidate withdraws
-GET    /applications/job/{job_id}            → employer sees applicants for a job
+GET    /applications/job/{job_id}              → employer sees applicants for a job
 """
 
 import uuid
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import joinedload
 
-from app.core.dependencies import CandidateUser, EmployerUser, CurrentUser, get_db
+from app.core.dependencies import CandidateUser, EmployerUser, get_db
 from app.core.logging import logger
-
-from app.db.models.application import ApplicationStatus
-from app.db.models.job import JobStatus
+from app.db.models.application import Application, ApplicationStatus
+from app.db.models.candidate_profiles import CandidateProfile
+from app.db.models.job import JobPosting, JobStatus
+from app.db.models.resume_versions import ResumeVersion
 from app.repositories import application_repo, job_repo
 from app.repositories.org_repo import get_org_for_user
-from app.repositories.user_repo import get_user_by_id
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
     ApplicationWithJobResponse,
+    EmployerApplicationResponse,
 )
-
-from sqlalchemy import select
-from app.db.models.candidate_profiles import CandidateProfile
-from app.db.models.resume_versions import ResumeVersion
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -49,44 +48,59 @@ async def _get_candidate_profile(db: AsyncSession, user_id: uuid.UUID) -> Candid
     return profile
 
 
-async def _get_or_create_placeholder_resume(
-    db: AsyncSession, candidate_id: uuid.UUID
+async def _resolve_resume_version(
+    db: AsyncSession,
+    profile: CandidateProfile,
+    requested_version_id: uuid.UUID | None,
 ) -> ResumeVersion:
     """
-    Temporary: return the candidate's current resume version, or create a
-    placeholder if none exists yet (pre-upload phase).
+    Resolves which resume version to attach to an application.
 
-    Once resume upload is built, this will be replaced by:
-      if not profile.current_resume_version_id:
-          raise HTTPException(400, "Please upload a resume before applying")
+    - If caller supplied a specific resume_version_id, validates it belongs
+      to this candidate and uses it (allows applying with an older version).
+    - Otherwise falls back to their current active version.
+    - If no resume has ever been uploaded, raises 400.
     """
+    if requested_version_id:
+        result = await db.execute(
+            select(ResumeVersion).where(
+                ResumeVersion.id == requested_version_id,
+                ResumeVersion.candidate_id == profile.id,
+            )
+        )
+        rv = result.scalar_one_or_none()
+        if not rv:
+            raise HTTPException(404, "Resume version not found or does not belong to you")
+        return rv
+
+    # Fall back to current active resume
+    if not profile.current_resume_version_id:
+        raise HTTPException(
+            400,
+            "You must upload a resume before applying. "
+            "Go to your profile to upload one.",
+        )
     result = await db.execute(
-        select(ResumeVersion)
-        .where(ResumeVersion.candidate_id == candidate_id)
-        .order_by(ResumeVersion.version_number.desc())
+        select(ResumeVersion).where(
+            ResumeVersion.id == profile.current_resume_version_id
+        )
     )
-    existing = result.scalar_one_or_none()
-    if existing:
-        return existing
-
-    # Create a placeholder v1 resume so applications work before upload is built
-    placeholder = ResumeVersion(
-        candidate_id=candidate_id,
-        s3_key="placeholder",
-        version_number=1,
-    )
-    db.add(placeholder)
-    await db.flush()
-    return placeholder
+    rv = result.scalar_one_or_none()
+    if not rv:
+        raise HTTPException(
+            400,
+            "Active resume version not found — please re-upload your resume.",
+        )
+    return rv
 
 
-def _build_with_job_response(app, job, org) -> ApplicationWithJobResponse:
+def _build_with_job_response(
+    app: Application, job: JobPosting, org
+) -> ApplicationWithJobResponse:
     return ApplicationWithJobResponse(
         id=app.id,
         job_id=app.job_id,
         candidate_id=app.candidate_id,
-        full_name=app.candidate_profile.full_name if app.candidate_profile else "Unknown",
-        email=app.candidate_profile.email if app.candidate_profile else "Unknown",
         status=app.status,
         match_score=app.match_score,
         is_override=app.is_override,
@@ -119,22 +133,23 @@ async def apply(
 
     # 2. Get candidate profile
     profile = await _get_candidate_profile(db, user.id)
-    logger.info(f"Candidate prfile: {profile}")
 
-    # 3. Check for duplicate application
+    # 3. Resolve which resume version to use — raises 400 if no resume uploaded
+    resume_version = await _resolve_resume_version(db, profile, body.resume_version_id)
+
+    # 4. Check for duplicate application
     existing = await application_repo.get_application_for_candidate_job(
         db, profile.id, body.job_id
     )
-    # if existing, allow re-apply if withdrawn, otherwise reject
     if existing:
         if existing.status == ApplicationStatus.WITHDRAWN:
+            # Allow re-apply: update resume version and reset to pending
             existing.status = ApplicationStatus.PENDING
+            existing.resume_version_id = resume_version.id
             await db.commit()
+            await db.refresh(existing)
             return existing
         raise HTTPException(400, "You have already applied to this job")
-
-    # 4. Get or create a resume version (placeholder until upload is built)
-    resume_version = await _get_or_create_placeholder_resume(db, profile.id)
 
     # 5. Create application (match_score is null until embedding pipeline runs)
     application = await application_repo.create_application(
@@ -143,7 +158,6 @@ async def apply(
         candidate_id=profile.id,
         resume_version_id=resume_version.id,
     )
-
     return application
 
 
@@ -179,25 +193,20 @@ async def get_mine(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     profile = await _get_candidate_profile(db, user.id)
-    app = await application_repo.get_application_by_id(db, application_id)
-
-    if not app or app.candidate_id != profile.id:
-        raise HTTPException(404, "Application not found")
-
-    # Eagerly load job + org for the response
-    from sqlalchemy.orm import joinedload
-    from app.db.models.job import JobPosting
-    from sqlalchemy import select as sa_select
 
     result = await db.execute(
-        sa_select(Application)  # noqa: F821 — imported below
+        select(Application)
         .options(
             joinedload(Application.job_posting).joinedload(JobPosting.organization)
         )
         .where(Application.id == application_id)
     )
     app = result.unique().scalar_one_or_none()
-    return _build_with_job_response(app, app.job_posting, app.job_posting.organization) # type: ignore
+
+    if not app or app.candidate_id != profile.id:
+        raise HTTPException(404, "Application not found")
+
+    return _build_with_job_response(app, app.job_posting, app.job_posting.organization)  # type: ignore
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +236,7 @@ async def withdraw(
 # Employer — view applicants for a job
 # ---------------------------------------------------------------------------
 
-@router.get("/job/{job_id}", response_model=List[ApplicationResponse])
+@router.get("/job/{job_id}", response_model=List[EmployerApplicationResponse])
 async def list_for_job(
     job_id: uuid.UUID,
     user: EmployerUser,
@@ -241,13 +250,26 @@ async def list_for_job(
     if not org or job.org_id != org.id:
         raise HTTPException(403, "Not your job")
 
-    applications = await application_repo.list_applications_by_job(db, job_id)
-    # [<Application job_id, candidate_id, status=ApplicationStatus.PENDING score=N/A>]
-    for app in applications:
-        profile = await db.get(CandidateProfile, app.candidate_id)
-        logger.info(f"Candidate: {profile}")
-    return applications
+    # Returns list of Row(Application, CandidateProfile, User)
+    rows = await application_repo.list_applications_by_job(db, job_id)
 
+    # if status is withdrawn, don't show the application to the employer
+    filtered_rows = [
+        (app, profile, user) for app, profile, user in rows if app.status != ApplicationStatus.WITHDRAWN
+    ]
 
-# Fix missing import at module level
-from app.db.models.application import Application  # noqa: E402
+    return [
+        EmployerApplicationResponse(
+            id=app.id,
+            job_id=app.job_id,
+            candidate_id=app.candidate_id,
+            applicant_name=user_row.full_name,
+            applicant_email=user_row.email,
+            status=app.status,
+            match_score=app.match_score,
+            is_override=app.is_override,
+            applied_at=app.applied_at,
+            resume_version_id=app.resume_version_id,
+        )
+        for app, _profile_row, user_row in filtered_rows
+    ]
