@@ -50,6 +50,8 @@ LOCAL_STORAGE_ROOT = REPO_ROOT / "storage"
 class StorageBackend(Protocol):
     def generate_presigned_upload_url(self, s3_key: str, content_type: str, expires_in: int) -> str: ...
     def generate_presigned_download_url(self, s3_key: str, expires_in: int) -> str: ...
+    def read_file(self, s3_key: str) -> tuple[bytes, str]: ...
+    def delete_file(self, s3_key: str) -> None: ...
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +91,21 @@ class S3Backend:
             Params={"Bucket": self._bucket, "Key": s3_key},
             ExpiresIn=expires_in,
         )
+
+    def read_file(self, s3_key: str) -> tuple[bytes, str]:
+        from botocore.exceptions import ClientError
+        try:
+            response = self._client.get_object(Bucket=self._bucket, Key=s3_key)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+                raise FileNotFoundError(f"No file stored at key: {s3_key}")
+            raise
+        data = response["Body"].read()
+        content_type = response.get("ContentType") or "application/octet-stream"
+        return data, content_type
+    
+    def delete_file(self, s3_key: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=s3_key)
 
 
 # ---------------------------------------------------------------------------
@@ -225,6 +242,14 @@ class LocalBackend:
                 content_type = guessed
 
         return path.read_bytes(), content_type
+    
+    def delete_file(self, s3_key: str) -> None:
+        path = self._resolve_path(s3_key)
+        if path.exists():
+            path.unlink()
+        meta_path = self._meta_path(path)
+        if meta_path.exists():
+            meta_path.unlink()
 
 
 def _b64url_encode(data: bytes) -> str:

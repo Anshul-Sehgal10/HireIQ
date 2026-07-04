@@ -1,0 +1,23 @@
+import enum
+
+class JobCategory(str, enum.Enum):
+    BACKEND = "backend"
+    FRONTEND = "frontend"
+    FULLSTACK = "fullstack"
+    MOBILE = "mobile"
+    DEVOPS_CLOUD = "devops_cloud"
+    DATA_ML = "data_ml"
+    QA_TESTING = "qa_testing"
+    SECURITY = "security"
+    DESIGN_UX = "design_ux"
+    PRODUCT_MANAGEMENT = "product_management"
+    EMBEDDED_SYSTEMS = "embedded_systems"
+    GAME_DEV = "game_dev"
+    BLOCKCHAIN = "blockchain"
+    SALES = "sales"
+    MARKETING = "marketing"
+    HR_RECRUITING = "hr_recruiting"
+    FINANCE = "finance"
+    OPERATIONS = "operations"
+    CUSTOMER_SUPPORT = "customer_support"
+    OTHER = "other"

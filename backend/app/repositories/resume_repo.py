@@ -30,6 +30,7 @@ async def create_resume_version(
     s3_key: str,
     version_number: int,
 ) -> ResumeVersion:
+    """Creates a new ResumeVersion row. Caller is responsible for committing."""
     rv = ResumeVersion(
         candidate_id=candidate_id,
         s3_key=s3_key,
@@ -71,10 +72,48 @@ async def set_current_resume(
     db: AsyncSession,
     profile: CandidateProfile,
     resume_version_id: uuid.UUID,
+    embedding: Optional[list] = None,
+    categories: Optional[list[str]] = None,
 ) -> CandidateProfile:
-    """Marks a resume version as the candidate's active resume."""
     profile.current_resume_version_id = resume_version_id
     profile.resume_updated_at = datetime.now(timezone.utc)
+    if embedding is not None:
+        profile.resume_embedding = embedding
+    if categories is not None:
+        profile.categories = categories
     await db.commit()
     await db.refresh(profile)
     return profile
+
+
+async def increment_override_usage(db: AsyncSession, profile: CandidateProfile) -> CandidateProfile:
+    """Increments the override_apps_used counter for a candidate."""
+    profile.override_apps_used += 1
+    await db.commit()
+    await db.refresh(profile)
+    return profile
+
+
+async def rename_resume_version(db: AsyncSession, rv: ResumeVersion, label: str) -> ResumeVersion:
+    rv.label = label.strip()[:255]
+    await db.commit()
+    await db.refresh(rv)
+    return rv
+
+
+async def count_applications_for_resume_version(
+    db: AsyncSession, resume_version_id: uuid.UUID
+) -> int:
+    from sqlalchemy import func
+    from app.db.models.application import Application
+    result = await db.execute(
+        select(func.count()).select_from(Application).where(
+            Application.resume_version_id == resume_version_id
+        )
+    )
+    return result.scalar_one()
+
+
+async def delete_resume_version(db: AsyncSession, rv: ResumeVersion) -> None:
+    await db.delete(rv)
+    await db.commit()

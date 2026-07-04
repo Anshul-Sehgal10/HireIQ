@@ -1,6 +1,7 @@
 import uuid
 from typing import Optional, List
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.job import JobPosting, JobStatus
 
@@ -23,12 +24,14 @@ async def list_jobs_by_org(db: AsyncSession, org_id: uuid.UUID) -> List[JobPosti
     )
     return list(result.scalars().all())
 
-async def list_published_jobs(db: AsyncSession) -> List[JobPosting]:
-    result = await db.execute(
-        select(JobPosting)
-        .where(JobPosting.status == JobStatus.PUBLISHED)
-        .order_by(JobPosting.created_at.desc())
-    )
+async def list_published_jobs(
+    db: AsyncSession, categories: Optional[List[str]] = None
+) -> List[JobPosting]:
+    query = select(JobPosting).where(JobPosting.status == JobStatus.PUBLISHED)
+    if categories:
+        query = query.where(JobPosting.categories.overlap(categories))
+    query = query.order_by(JobPosting.created_at.desc())
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 async def update_job(db: AsyncSession, job: JobPosting, updates: dict) -> JobPosting:
@@ -40,9 +43,24 @@ async def update_job(db: AsyncSession, job: JobPosting, updates: dict) -> JobPos
     return job
 
 async def publish_job(db: AsyncSession, job: JobPosting) -> JobPosting:
-    from datetime import datetime, timezone, timedelta
+    from datetime import datetime, timezone
+    from app.services.llm_extraction import extract_jd
+    from app.services.embeddings import embed_text, structured_extraction_to_embedding_text
+    from app.core.logging import logger
+
+    try:
+        extraction = await extract_jd(job.description)
+        embedding_text = structured_extraction_to_embedding_text(extraction.model_dump())
+        embedding = await embed_text(embedding_text)
+
+        job.parsed_data = extraction.model_dump(mode="json")
+        job.categories = [c.value for c in extraction.categories]
+        job.jd_embedding = embedding
+    except Exception as exc:
+        logger.error(f"JD extraction/embedding failed for job {job.id}: {exc}")
+        # proceed with publish anyway — same reasoning as resumes
+
     job.status = JobStatus.PUBLISHED
-    # tz_india = timezone(timedelta(hours=5, minutes=30)) # IST timezone
     job.published_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(job)
@@ -53,3 +71,12 @@ async def close_job(db: AsyncSession, job: JobPosting) -> JobPosting:
     await db.commit()
     await db.refresh(job)
     return job
+
+
+async def get_job_with_org(db: AsyncSession, job_id: uuid.UUID) -> Optional[JobPosting]:
+    result = await db.execute(
+        select(JobPosting)
+        .options(joinedload(JobPosting.organization))
+        .where(JobPosting.id == job_id)
+    )
+    return result.unique().scalar_one_or_none()

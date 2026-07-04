@@ -5,7 +5,7 @@ import {
   Briefcase,
   Building2,
   Users,
-  UserCircle,
+  FileText,
 } from "lucide-react";
 
 export type NavItem = {
@@ -56,6 +56,11 @@ export const NAVIGATION: Record<string, NavItem[]> = {
       label: "Jobs",
       href: "/candidate/jobs",
       icon: Briefcase,
+    },
+    { 
+      label: "Resumes",
+      href: "/candidate/resumes", 
+      icon: FileText
     },
   ],
 };

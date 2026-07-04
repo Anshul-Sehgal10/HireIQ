@@ -41,5 +41,11 @@ class JobResponse(BaseModel):
     hiring_count: int
     scenario_enabled: bool
     match_threshold: float
+    categories: Optional[list[str]] = None
 
     model_config = {"from_attributes": True}
+
+class JobDetailResponse(JobResponse):
+    org_name: str
+    org_domain: Optional[str]
+    org_verification_status: str

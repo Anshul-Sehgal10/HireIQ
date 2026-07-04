@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     STORAGE_BUCKET: str = ""
     STORAGE_ENDPOINT_URL: str = ""  # empty = use AWS S3 default endpoint
 
+    # Gemini API configuration
+    GEMINI_API_KEY: SecretStr = SecretStr("")
+    GEMINI_EXTRACTION_MODEL: str = "gemini-flash-lite-latest"
+    GEMINI_EMBEDDING_MODEL: str = "gemini-embedding-001"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

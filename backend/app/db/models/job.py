@@ -21,7 +21,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
@@ -137,6 +137,9 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
     published_at: Mapped[Optional[object]] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[Optional[object]] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
+
     # Relationships
     organization: Mapped["Organization"] = relationship(back_populates="job_postings")
     applications: Mapped[List["Application"]] = relationship(
@@ -167,6 +170,8 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
         ),
         # Composite: active jobs by org (employer dashboard)
         Index("ix_job_postings_org_status", "org_id", "status"),
+
+        Index("ix_job_postings_categories", "categories", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:

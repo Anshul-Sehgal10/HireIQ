@@ -89,13 +89,14 @@ async def create_application(
     resume_version_id: uuid.UUID,
     match_score: Optional[float] = None,
     is_override: bool = False,
+    status: ApplicationStatus = ApplicationStatus.PENDING,
 ) -> Application:
     application = Application(
         job_id=job_id,
         candidate_id=candidate_id,
         resume_version_id=resume_version_id,
         match_score=match_score,
-        status=ApplicationStatus.PENDING.value,
+        status=status.value,
         is_override=is_override,
     )
     db.add(application)

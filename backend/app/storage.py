@@ -13,7 +13,6 @@ local-disk-specific operations).
 
 from app.storage_backends import get_storage
 
-
 def generate_presigned_upload_url(
     s3_key: str,
     content_type: str,
@@ -33,3 +32,6 @@ def generate_presigned_download_url(
 ) -> str:
     """Generates a presigned (or locally-signed) GET URL for a stored file."""
     return get_storage().generate_presigned_download_url(s3_key, expires_in)
+
+def delete_file(s3_key: str) -> None:
+    get_storage().delete_file(s3_key)

@@ -9,7 +9,7 @@ GET    /applications/job/{job_id}              → employer sees applicants for 
 """
 
 import uuid
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -30,6 +30,9 @@ from app.schemas.application import (
     ApplicationWithJobResponse,
     EmployerApplicationResponse,
 )
+from app.services.matching import cosine_similarity
+from app.services.resume_selection import resolve_resume_version
+from app.repositories.resume_repo import increment_override_usage
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -46,52 +49,6 @@ async def _get_candidate_profile(db: AsyncSession, user_id: uuid.UUID) -> Candid
     if not profile:
         raise HTTPException(404, "Candidate profile not found")
     return profile
-
-
-async def _resolve_resume_version(
-    db: AsyncSession,
-    profile: CandidateProfile,
-    requested_version_id: uuid.UUID | None,
-) -> ResumeVersion:
-    """
-    Resolves which resume version to attach to an application.
-
-    - If caller supplied a specific resume_version_id, validates it belongs
-      to this candidate and uses it (allows applying with an older version).
-    - Otherwise falls back to their current active version.
-    - If no resume has ever been uploaded, raises 400.
-    """
-    if requested_version_id:
-        result = await db.execute(
-            select(ResumeVersion).where(
-                ResumeVersion.id == requested_version_id,
-                ResumeVersion.candidate_id == profile.id,
-            )
-        )
-        rv = result.scalar_one_or_none()
-        if not rv:
-            raise HTTPException(404, "Resume version not found or does not belong to you")
-        return rv
-
-    # Fall back to current active resume
-    if not profile.current_resume_version_id:
-        raise HTTPException(
-            400,
-            "You must upload a resume before applying. "
-            "Go to your profile to upload one.",
-        )
-    result = await db.execute(
-        select(ResumeVersion).where(
-            ResumeVersion.id == profile.current_resume_version_id
-        )
-    )
-    rv = result.scalar_one_or_none()
-    if not rv:
-        raise HTTPException(
-            400,
-            "Active resume version not found — please re-upload your resume.",
-        )
-    return rv
 
 
 def _build_with_job_response(
@@ -113,6 +70,9 @@ def _build_with_job_response(
         org_name=org.name if org else "Unknown",
     )
 
+def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
+    """Returns the cosine similarity score between a resume and a job posting, or None if either embedding is missing."""
+    return cosine_similarity(resume_version.embedding, job.jd_embedding)
 
 # ---------------------------------------------------------------------------
 # Candidate — apply
@@ -124,39 +84,76 @@ async def apply(
     user: CandidateUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    # 1. Job must exist and be published
     job = await job_repo.get_job(db, body.job_id)
     if not job:
         raise HTTPException(404, "Job not found")
     if job.status != JobStatus.PUBLISHED:
         raise HTTPException(400, "This job is not accepting applications")
 
-    # 2. Get candidate profile
     profile = await _get_candidate_profile(db, user.id)
+    resume_version = await resolve_resume_version(db, profile, body.resume_version_id)
 
-    # 3. Resolve which resume version to use — raises 400 if no resume uploaded
-    resume_version = await _resolve_resume_version(db, profile, body.resume_version_id)
-
-    # 4. Check for duplicate application
     existing = await application_repo.get_application_for_candidate_job(
         db, profile.id, body.job_id
     )
-    if existing:
-        if existing.status == ApplicationStatus.WITHDRAWN:
-            # Allow re-apply: update resume version and reset to pending
-            existing.status = ApplicationStatus.PENDING
-            existing.resume_version_id = resume_version.id
-            await db.commit()
-            await db.refresh(existing)
-            return existing
+    if existing and existing.status != ApplicationStatus.WITHDRAWN:
         raise HTTPException(400, "You have already applied to this job")
 
-    # 5. Create application (match_score is null until embedding pipeline runs)
+    match_score = _score(job, resume_version)
+
+    # Embeddings not ready yet (e.g. JD just published, embedding pipeline
+    # hasn't run) — let the application through unscored rather than blocking.
+    is_low_match = match_score is not None and match_score < job.match_threshold
+
+    if is_low_match and not body.override:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "low_match",
+                "message": "Your profile is not a strong match for this role based on your skills and experience.",
+                "match_score": round(match_score, 3), # type: ignore
+                "match_threshold": job.match_threshold,
+                "overrides_remaining": max(
+                    0, profile.override_apps_limit - profile.override_apps_used
+                ),
+            },
+        )
+
+    if is_low_match and body.override:
+        if profile.override_apps_used >= profile.override_apps_limit:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "code": "override_quota_exceeded",
+                    "message": "You've used all your override applications for this month.",
+                },
+            )
+        await increment_override_usage(db, profile)
+
+    if match_score is None:
+        resolved_status = ApplicationStatus.PENDING
+    elif match_score >= job.match_threshold:
+        resolved_status = ApplicationStatus.RESUME_PASSED
+    else:
+        resolved_status = ApplicationStatus.RESUME_PASSED  # override path — let through
+
+    if existing and existing.status == ApplicationStatus.WITHDRAWN:
+        existing.status = resolved_status.value  # type: ignore
+        existing.resume_version_id = resume_version.id
+        existing.match_score = match_score
+        existing.is_override = is_low_match and body.override
+        await db.commit()
+        await db.refresh(existing)
+        return existing
+
     application = await application_repo.create_application(
         db=db,
         job_id=body.job_id,
         candidate_id=profile.id,
         resume_version_id=resume_version.id,
+        match_score=match_score,
+        is_override=is_low_match and body.override,
+        status=resolved_status,
     )
     return application
 

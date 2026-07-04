@@ -9,7 +9,7 @@ from sqlalchemy import (
     Integer,
     String,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, TimestampMixin, UUIDMixin
@@ -71,6 +71,8 @@ class CandidateProfile(UUIDMixin, TimestampMixin, Base):
         DateTime(timezone=True), nullable=True
     )
 
+    categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
+
     # Relationships
     user: Mapped["User"] = relationship(back_populates="candidate_profile")
     resume_versions: Mapped[List["ResumeVersion"]] = relationship(
@@ -93,6 +95,7 @@ class CandidateProfile(UUIDMixin, TimestampMixin, Base):
             postgresql_ops={"resume_embedding": "vector_cosine_ops"},
             postgresql_with={"lists": 100},
         ),
+        Index("ix_candidate_profiles_categories", "categories", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:

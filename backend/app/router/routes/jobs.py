@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -19,6 +19,12 @@ from app.repositories.job_repo import (
 )
 from app.repositories.org_repo import get_org_for_user
 from app.schemas.job import JobCreate, JobResponse, JobUpdate
+
+from app.repositories.job_repo import get_job_with_org
+from app.schemas.job import JobDetailResponse
+from app.schemas.matching import RelevanceCheckResponse
+from app.services.matching import cosine_similarity
+from app.services.resume_selection import resolve_resume_version
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -71,18 +77,56 @@ async def feed(
             detail="resume_required",
         )
 
-    return await list_published_jobs(db)
+    return await list_published_jobs(db, categories=profile.categories)
 
 
-@router.get("/{job_id}", response_model=JobResponse)
+@router.get("/{job_id}", response_model=JobDetailResponse)
 async def get_one(
     job_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    job = await get_job_with_org(db, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    org = job.organization
+    return JobDetailResponse(
+        id=job.id, org_id=job.org_id, title=job.title, description=job.description,
+        status=job.status, work_mode=job.work_mode, job_level=job.job_level,
+        location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
+        hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
+        match_threshold=job.match_threshold, categories=job.categories,
+        org_name=org.name if org else "Unknown",
+        org_domain=org.domain if org else None,
+        org_verification_status=org.verification_status.value if org else "pending",
+    )
+
+
+@router.get("/{job_id}/relevance", response_model=RelevanceCheckResponse)
+async def check_relevance(
+    job_id: UUID,
+    user: CandidateUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    resume_version_id: Optional[UUID] = None,
+):
     job = await get_job(db, job_id)
     if not job:
         raise HTTPException(404, "Job not found")
-    return job
+
+    result = await db.execute(select(CandidateProfile).where(CandidateProfile.user_id == user.id))
+    profile = result.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(404, "Candidate profile not found")
+
+    resume_version = await resolve_resume_version(db, profile, resume_version_id)
+    match_score = cosine_similarity(resume_version.embedding, job.jd_embedding)
+    meets_threshold = match_score is not None and match_score >= job.match_threshold
+
+    return RelevanceCheckResponse(
+        resume_version_id=resume_version.id,
+        match_score=round(match_score, 4) if match_score is not None else None,
+        match_threshold=job.match_threshold,
+        meets_threshold=meets_threshold,
+    )
 
 
 @router.patch("/{job_id}", response_model=JobResponse)

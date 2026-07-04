@@ -8,6 +8,7 @@ from app.db.models.job import JobStatus, WorkMode, JobLevel
 class ApplicationCreate(BaseModel):
     job_id: UUID
     resume_version_id: Optional[UUID] = None  # None → use current active resume
+    override: bool = False  # candidate explicitly wants to apply despite a low match
 
 
 class ApplicationResponse(BaseModel):

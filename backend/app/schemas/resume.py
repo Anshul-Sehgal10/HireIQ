@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Optional
+
+from pydantic import BaseModel, Field
 
 
 ALLOWED_CONTENT_TYPES = {
@@ -28,6 +30,10 @@ class ResumeVersionResponse(BaseModel):
     s3_key: str
     version_number: int
     created_at: datetime
+    label: Optional[str] = None
     is_current: bool     # True if this is the candidate's active resume
 
     model_config = {"from_attributes": True}
+
+class ResumeRenameRequest(BaseModel):
+    label: str = Field(min_length=1, max_length=255)

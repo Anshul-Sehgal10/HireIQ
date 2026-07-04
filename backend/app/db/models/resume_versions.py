@@ -11,7 +11,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, UUIDMixin
@@ -48,6 +48,11 @@ class ResumeVersion(UUIDMixin, Base):
     embedding: Mapped[Optional[list]] = mapped_column(Vector(1536), nullable=True)
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
 
+    parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
+
+    label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -64,6 +69,7 @@ class ResumeVersion(UUIDMixin, Base):
     __table_args__ = (
         UniqueConstraint("candidate_id", "version_number", name="uq_resume_version"),
         Index("ix_resume_versions_candidate_id", "candidate_id"),
+        Index("ix_resume_versions_categories", "categories", postgresql_using="gin"),
     )
 
     def __repr__(self) -> str:
