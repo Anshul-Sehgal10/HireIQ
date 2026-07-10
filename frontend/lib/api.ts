@@ -14,13 +14,22 @@ export function apiUrl(path: string): string {
   return `${getApiBaseUrl()}${normalizedPath}`;
 }
 
-export function apiFetch(path: string, options?: RequestInit): Promise<Response> {
-  return fetch(apiUrl(path), {
-    ...options,
+export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
+  const doFetch = () =>
+    fetch(apiUrl(path), {
+      ...options,
+      credentials: "include",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+    });
+
+  const res = await doFetch();
+  if (res.status !== 401) return res;
+
+  const refreshRes = await fetch(apiUrl("/auth/refresh"), {
+    method: "POST",
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options?.headers,
-    },
   });
+  if (!refreshRes.ok) return res; // refresh failed — surface the original 401
+
+  return doFetch();
 }

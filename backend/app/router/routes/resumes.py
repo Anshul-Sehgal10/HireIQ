@@ -9,23 +9,28 @@ GET  /resumes/{resume_version_id}/download-url → presigned GET URL to view a r
 
 import uuid
 from typing import Annotated, List
-
 from fastapi import APIRouter, Depends, HTTPException, status
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.logging import logger
 from app.core.dependencies import CandidateUser, get_db
-from app.db.models.candidate_profiles import CandidateProfile
+
 from app.repositories import resume_repo
-from app.services.resume_selection import resolve_resume_version
+from app.db.models.candidate_profiles import CandidateProfile
 from app.schemas.resume import (
     ALLOWED_CONTENT_TYPES,
     PresignedUploadResponse,
     ResumeUploadRequest,
     ResumeVersionResponse,
     ResumeRenameRequest,
+    ResumeExtractionDetailResponse,
 )
+
 from app.storage import generate_presigned_download_url, generate_presigned_upload_url
+
+from app.services.resume_processing import process_resume_extraction
 
 router = APIRouter(prefix="/resumes", tags=["resumes"])
 
@@ -97,64 +102,36 @@ async def confirm_upload(
     user: CandidateUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    """
-    Called after the frontend has successfully PUT the file to S3/R2.
-    Sets this version as the candidate's active resume, unblocking the jobs feed.
-    """
     profile = await _get_candidate_profile(db, user.id)
     rv = await resume_repo.get_resume_version(db, resume_version_id, profile.id)
     if not rv:
         raise HTTPException(404, "Resume version not found")
 
-    await resume_repo.set_current_resume(
-                                db, 
-                                profile,
-                                rv.id,
-                                embedding=rv.embedding,
-                                categories=rv.categories
-                            )
+    is_first_resume = profile.current_resume_version_id is None
 
+    # Only the candidate's very first upload auto-activates. Later uploads
+    # stay inactive until explicitly switched — an exploratory or in-progress
+    # upload should never silently take over what's used for matching.
+    if is_first_resume:
+        await resume_repo.set_current_resume(
+            db, profile, rv.id, embedding=rv.embedding, categories=rv.categories
+        )
 
-    from app.storage import get_storage  # local import to avoid circulars, or move to top
-    from app.services.resume_parser import extract_text
-    from app.services.llm_extraction import extract_resume
-    from app.services.embeddings import embed_text, structured_extraction_to_embedding_text
-
-    storage = get_storage()  # ← see note below on read access
-    try:
-        file_bytes, content_type = storage.read_file(rv.s3_key)
-        # read_file implemented in storage_backend
-        raw_text = extract_text(file_bytes, content_type)
-        if raw_text.strip():
-            extraction = await extract_resume(raw_text)
-            embedding_text = structured_extraction_to_embedding_text(extraction.model_dump())
-            embedding = await embed_text(embedding_text)
-
-            rv.parsed_data = extraction.model_dump(mode="json")
-            rv.categories = [c.value for c in extraction.categories]
-            rv.embedding = embedding
-            
-            profile.resume_embedding = embedding
-            profile.categories = rv.categories  # ← new: keep the feed-filter cache in sync
-
-
-            await db.commit()
-            await db.refresh(rv)
-    except Exception as exc:
-        # Don't fail the upload if extraction/embedding fails — the resume is
-        # still usable, it just won't have a match_score until this is retried.
-        logger.error(f"Resume extraction/embedding failed for {rv.id}: {exc}")
+    from app.services.resume_processing import process_resume_extraction
+    if await process_resume_extraction(rv, profile):
+        await db.commit()
+        await db.refresh(rv)
 
     return ResumeVersionResponse(
-        id=rv.id,
-        candidate_id=rv.candidate_id,
+        id=rv.id, 
+        candidate_id=rv.candidate_id, 
         s3_key=rv.s3_key,
-        version_number=rv.version_number,
+        version_number=rv.version_number, 
         created_at=rv.created_at, # type: ignore
-        label=rv.label,
-        is_current=True,
+        label=rv.label, 
+        is_current=(rv.id == profile.current_resume_version_id),
+        has_embedding=rv.embedding is not None,
     )
-
 
 # ---------------------------------------------------------------------------
 # List all resume versions
@@ -172,13 +149,14 @@ async def list_versions(
 
     return [
         ResumeVersionResponse(
-            id=rv.id,
-            candidate_id=rv.candidate_id,
+            id=rv.id, 
+            candidate_id=rv.candidate_id, 
             s3_key=rv.s3_key,
-            version_number=rv.version_number,
+            version_number=rv.version_number, 
             label=rv.label,
             created_at=rv.created_at, # type: ignore
             is_current=(rv.id == current_id),
+            has_embedding=rv.embedding is not None,
         )
         for rv in versions
     ]
@@ -220,10 +198,46 @@ async def rename(
     return ResumeVersionResponse(
         id=rv.id, candidate_id=rv.candidate_id, s3_key=rv.s3_key,
         version_number=rv.version_number, label=rv.label,
-        created_at=rv.created_at,
+        created_at=rv.created_at, # type: ignore
         is_current=(rv.id == profile.current_resume_version_id),
+        has_embedding=rv.embedding is not None,
     )
 
+
+# --- NEW: retry extraction + embedding on an existing version ---
+@router.post("/{resume_version_id}/reprocess", response_model=ResumeVersionResponse)
+async def reprocess(
+    resume_version_id: uuid.UUID,
+    user: CandidateUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Re-runs extraction + embedding on an existing resume version — for when
+    the first attempt failed (e.g. bad GEMINI_API_KEY, transient API error)
+    and left it without an embedding. No re-upload or deletion required.
+    """
+    profile = await _get_candidate_profile(db, user.id)
+    rv = await resume_repo.get_resume_version(db, resume_version_id, profile.id)
+    if not rv:
+        raise HTTPException(404, "Resume version not found")
+
+    if not await process_resume_extraction(rv, profile):
+        raise HTTPException(
+            422,
+            "Reprocessing failed — check that the file contains readable text "
+            "and that the LLM service is configured correctly.",
+        )
+
+    await db.commit()
+    await db.refresh(rv)
+
+    return ResumeVersionResponse(
+        id=rv.id, candidate_id=rv.candidate_id, s3_key=rv.s3_key,
+        version_number=rv.version_number, label=rv.label,
+        created_at=rv.created_at, # type: ignore
+        is_current=(rv.id == profile.current_resume_version_id),
+        has_embedding=rv.embedding is not None,
+    )
 
 @router.post("/{resume_version_id}/set-current", response_model=ResumeVersionResponse)
 async def set_current(
@@ -243,10 +257,37 @@ async def set_current(
     return ResumeVersionResponse(
         id=rv.id, candidate_id=rv.candidate_id, s3_key=rv.s3_key,
         version_number=rv.version_number, label=rv.label,
-        created_at=rv.created_at, is_current=True,
+        created_at=rv.created_at, # type: ignore 
+        is_current=True,
+        has_embedding=rv.embedding is not None,
     )
 
 
+@router.get("/{resume_version_id}/details", response_model=ResumeExtractionDetailResponse)
+async def get_details(
+    resume_version_id: uuid.UUID,
+    user: CandidateUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Returns the LLM's structured extraction + assigned categories for this
+    resume version — lets the candidate see exactly what the system parsed
+    from their resume and why it's matched (or not) to certain jobs."""
+    profile = await _get_candidate_profile(db, user.id)
+    rv = await resume_repo.get_resume_version(db, resume_version_id, profile.id)
+    if not rv:
+        raise HTTPException(404, "Resume version not found")
+
+    return ResumeExtractionDetailResponse(
+        id=rv.id,
+        version_number=rv.version_number,
+        label=rv.label,
+        categories=rv.categories,
+        parsed_data=rv.parsed_data,
+        has_embedding=rv.embedding is not None,
+    )
+
+
+# --- Delete: now a soft delete, no application-count check needed ---
 @router.delete("/{resume_version_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete(
     resume_version_id: uuid.UUID,
@@ -264,19 +305,8 @@ async def delete(
             "This is your active resume. Set a different version as active before deleting it.",
         )
 
-    usage_count = await resume_repo.count_applications_for_resume_version(db, rv.id)
-    if usage_count > 0:
-        raise HTTPException(
-            400,
-            "This resume version was used in a submitted application and can't be deleted.",
-        )
-
-    from app.storage import delete_file
-    try:
-        delete_file(rv.s3_key)
-    except Exception as exc:
-        # Don't block DB cleanup on a storage hiccup — an orphaned S3 object
-        # is recoverable later; an undeletable DB row is a worse UX bug.
-        logger.warning(f"Failed to delete storage file for resume {rv.id}: {exc}")
-
-    await resume_repo.delete_resume_version(db, rv)
+    # Soft delete only. The row and file stay put — any Application still
+    # references this exact version, and employers must keep seeing what
+    # the candidate actually submitted. This just removes it from the
+    # candidate's own view, so a bad/embeddingless resume never blocks re-upload.
+    await resume_repo.soft_delete_resume_version(db, rv)

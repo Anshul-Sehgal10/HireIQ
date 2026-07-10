@@ -45,11 +45,66 @@ export default function CandidateJobsPage() {
   );
 }
 
+function ActiveResumeSwitcher({
+  resumeVersions,
+  onSwitched,
+}: {
+  resumeVersions: ResumeVersion[];
+  onSwitched: () => void;
+}) {
+  const [switching, setSwitching] = useState(false);
+  const current = resumeVersions.find((r) => r.is_current);
+
+  if (resumeVersions.length <= 1) return null;
+
+  const handleChange = async (id: string) => {
+    if (!id || id === current?.id) return;
+    setSwitching(true);
+    try {
+      const res = await apiFetch(`/resumes/${id}/set-current`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? "Failed to switch active resume");
+      }
+      onSwitched(); // reload feed — categories used for filtering may have changed
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setSwitching(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-sm mb-4">
+      <span className="text-gray-500">Applying with:</span>
+      <select
+        value={current?.id ?? ""}
+        onChange={(e) => handleChange(e.target.value)}
+        disabled={switching}
+        className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 bg-white"
+      >
+        {resumeVersions.map((rv) => (
+          <option key={rv.id} value={rv.id}>
+            {rv.label ?? `Version ${rv.version_number}`}
+          </option>
+        ))}
+      </select>
+      {switching && (
+        <span className="text-xs text-gray-400 animate-pulse">Switching…</span>
+      )}
+    </div>
+  );
+}
+
 function JobFeed() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
-  const [feedStatus, setFeedStatus] = useState<"loading" | "resume_required" | "ok" | "error">("loading");
+  const [feedStatus, setFeedStatus] = useState<
+    "loading" | "resume_required" | "ok" | "error"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
 
@@ -94,17 +149,25 @@ function JobFeed() {
   }, []);
 
   const handleWithdraw = async (jobId: string) => {
-    const application = applications.find((item) => item.job_id === jobId && item.status !== "withdrawn");
+    const application = applications.find(
+      (item) => item.job_id === jobId && item.status !== "withdrawn",
+    );
     if (!application) return;
 
     try {
-      const res = await apiFetch(`/applications/${application.id}/withdraw`, { method: "POST" });
+      const res = await apiFetch(`/applications/${application.id}/withdraw`, {
+        method: "POST",
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.detail ?? "Failed to withdraw");
       }
 
-      setApplications((prev) => prev.map((item) => (item.id === application.id ? { ...item, status: "withdrawn" } : item)));
+      setApplications((prev) =>
+        prev.map((item) =>
+          item.id === application.id ? { ...item, status: "withdrawn" } : item,
+        ),
+      );
     } catch (e: any) {
       setError(e.message);
     }
@@ -115,7 +178,12 @@ function JobFeed() {
       <div className="max-w-lg mx-auto p-8">
         <div className="bg-white border border-gray-200 rounded-2xl p-8 shadow-sm">
           <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center mb-5">
-            <svg className="w-6 h-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg
+              className="w-6 h-6 text-blue-600"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -124,9 +192,12 @@ function JobFeed() {
               />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">Upload your resume first</h1>
+          <h1 className="text-xl font-bold text-gray-900 mb-2">
+            Upload your resume first
+          </h1>
           <p className="text-gray-500 text-sm mb-6">
-            You need to upload a resume before you can browse and apply to jobs. Your resume will be used to match you with relevant roles.
+            You need to upload a resume before you can browse and apply to jobs.
+            Your resume will be used to match you with relevant roles.
           </p>
           <ResumeUpload onUploaded={loadFeed} />
         </div>
@@ -135,28 +206,54 @@ function JobFeed() {
   }
 
   if (feedStatus === "loading") {
-    return <div className="p-8 text-gray-400 text-sm animate-pulse">Loading jobs…</div>;
+    return (
+      <div className="p-8 text-gray-400 text-sm animate-pulse">
+        Loading jobs…
+      </div>
+    );
   }
 
-  const appliedJobIds = new Set(applications.filter((item) => item.status !== "withdrawn").map((item) => item.job_id));
+  const appliedJobIds = new Set(
+    applications
+      .filter((item) => item.status !== "withdrawn")
+      .map((item) => item.job_id),
+  );
 
   return (
     <div className="max-w-3xl mx-auto p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-gray-900">Job Feed</h1>
-        <Link href="/candidate/resumes" className="text-sm text-gray-500 hover:text-gray-700 transition-colors">
+        <Link
+          href="/candidate/resumes"
+          className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+        >
           Manage resumes
         </Link>
       </div>
 
-      {error && <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>}
+      <ActiveResumeSwitcher
+        resumeVersions={resumeVersions}
+        onSwitched={loadFeed}
+      />
 
-      {jobs.length === 0 && <p className="text-gray-400 text-sm text-center py-12">No jobs posted yet.</p>}
+      {error && (
+        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {error}
+        </div>
+      )}
+
+      {jobs.length === 0 && (
+        <p className="text-gray-400 text-sm text-center py-12">
+          No jobs posted yet.
+        </p>
+      )}
 
       <div className="space-y-4">
         {jobs.map((job) => {
           const applied = appliedJobIds.has(job.id);
-          const meta = [job.location, job.work_mode, job.job_level].filter(Boolean).join(" · ");
+          const meta = [job.location, job.work_mode, job.job_level]
+            .filter(Boolean)
+            .join(" · ");
 
           return (
             <div
@@ -166,12 +263,19 @@ function JobFeed() {
             >
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-gray-900 text-base">{job.title}</h2>
-                  {meta && <p className="text-sm text-gray-500 mt-0.5">{meta}</p>}
+                  <h2 className="font-semibold text-gray-900 text-base">
+                    {job.title}
+                  </h2>
+                  {meta && (
+                    <p className="text-sm text-gray-500 mt-0.5">{meta}</p>
+                  )}
                   {job.categories && job.categories.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {job.categories.map((category) => (
-                        <span key={category} className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full">
+                        <span
+                          key={category}
+                          className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full"
+                        >
                           {category}
                         </span>
                       ))}
@@ -186,12 +290,16 @@ function JobFeed() {
                           : `Up to ₹${job.salary_max!.toLocaleString()}`}
                     </p>
                   )}
-                  <p className="text-sm text-gray-600 mt-3 line-clamp-3">{job.description}</p>
+                  <p className="text-sm text-gray-600 mt-3 line-clamp-3">
+                    {job.description}
+                  </p>
                 </div>
                 <div className="shrink-0">
                   {applied ? (
                     <div className="flex flex-col items-end gap-2">
-                      <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">Applied</span>
+                      <span className="text-xs bg-green-100 text-green-700 px-2.5 py-1 rounded-full font-medium">
+                        Applied
+                      </span>
                       <button
                         onClick={(event) => {
                           event.stopPropagation();

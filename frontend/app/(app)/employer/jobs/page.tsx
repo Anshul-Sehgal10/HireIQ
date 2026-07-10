@@ -3,6 +3,15 @@
 import { useEffect, useState } from "react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
+import ExtractionDetailModal from "@/components/ExtractionDetailModal";
+
+interface JobDetail {
+  id: string;
+  title: string;
+  categories: string[] | null;
+  parsed_data: Record<string, any> | null;
+  has_embedding: boolean;
+}
 
 interface Job {
   id: string;
@@ -44,11 +53,15 @@ function JobsContent() {
   const [applicants, setApplicants] = useState<Application[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
 
+  const [detailFor, setDetailFor] = useState<JobDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+
   useEffect(() => {
     apiFetch("/jobs/mine")
       .then(async (res) => {
         const data = await res.json().catch(() => null);
-        if (!res.ok) throw new Error(data?.detail || "Failed to retrieve jobs.");
+        if (!res.ok)
+          throw new Error(data?.detail || "Failed to retrieve jobs.");
         if (Array.isArray(data)) {
           setJobs(data);
           setFetchError(null);
@@ -64,17 +77,34 @@ function JobsContent() {
   const handlePublish = async (id: string) => {
     const res = await apiFetch(`/jobs/${id}/publish`, { method: "POST" });
     if (res.ok) {
-      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "published" } : j)));
+      setJobs((prev) =>
+        prev.map((j) => (j.id === id ? { ...j, status: "published" } : j)),
+      );
     } else {
       const d = await res.json().catch(() => ({}));
       alert(d.detail || "Failed to publish job.");
     }
   };
 
+  const handleReprocess = async (id: string) => {
+    const res = await apiFetch(`/jobs/${id}/reprocess`, { method: "POST" });
+    if (res.ok) {
+      const updated: Job = await res.json();
+      setJobs((prev) =>
+        prev.map((j) => (j.id === id ? { ...j, ...updated } : j)),
+      );
+    } else {
+      const d = await res.json().catch(() => ({}));
+      alert(d.detail || "Failed to reprocess job description.");
+    }
+  };
+
   const handleClose = async (id: string) => {
     const res = await apiFetch(`/jobs/${id}/close`, { method: "POST" });
     if (res.ok) {
-      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "closed" } : j)));
+      setJobs((prev) =>
+        prev.map((j) => (j.id === id ? { ...j, status: "closed" } : j)),
+      );
     } else {
       const d = await res.json().catch(() => ({}));
       alert(d.detail || "Failed to close job.");
@@ -97,21 +127,49 @@ function JobsContent() {
     }
   };
 
+  const viewDetails = async (id: string) => {
+    setLoadingDetail(id);
+    try {
+      const res = await apiFetch(`/jobs/${id}/details`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load details");
+      setDetailFor(data);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6 md:p-12 min-h-screen bg-gray-50/50">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 mb-8 border-b border-gray-200">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">Job Postings</h1>
-          <p className="text-sm text-gray-500 mt-1">Manage your active listings and candidate pipelines</p>
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
+            Job Postings
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Manage your active listings and candidate pipelines
+          </p>
         </div>
         {!selectedJobId && (
           <button
             onClick={() => setShowForm(true)}
             className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-all"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="2.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"
+              />
             </svg>
             Create New Posting
           </button>
@@ -128,11 +186,24 @@ function JobsContent() {
         /* Applicants view */
         <div className="space-y-6">
           <button
-            onClick={() => { setSelectedJobId(null); setApplicants([]); }}
+            onClick={() => {
+              setSelectedJobId(null);
+              setApplicants([]);
+            }}
             className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
           >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="2.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+              />
             </svg>
             Back to All Job Postings
           </button>
@@ -154,7 +225,9 @@ function JobsContent() {
               </div>
             ) : applicants.length === 0 ? (
               <div className="py-16 text-center">
-                <p className="text-gray-400 text-sm">No applications received yet.</p>
+                <p className="text-gray-400 text-sm">
+                  No applications received yet.
+                </p>
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
@@ -164,8 +237,12 @@ function JobsContent() {
                     className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/40 transition-colors"
                   >
                     <div className="space-y-0.5">
-                      <h3 className="font-semibold text-gray-900">{app.applicant_name}</h3>
-                      <p className="text-sm text-gray-500">{app.applicant_email}</p>
+                      <h3 className="font-semibold text-gray-900">
+                        {app.applicant_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {app.applicant_email}
+                      </p>
                       <p className="text-xs text-gray-400 mt-1">
                         Applied {new Date(app.applied_at).toLocaleDateString()}
                         {app.match_score != null && (
@@ -212,18 +289,25 @@ function JobsContent() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1.5">
                   <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-bold text-gray-900 tracking-tight">{job.title}</h2>
+                    <h2 className="text-lg font-bold text-gray-900 tracking-tight">
+                      {job.title}
+                    </h2>
                     <StatusBadge status={job.status} />
                   </div>
                   <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-                    <span className="capitalize">{job.location || "Remote"}</span>
+                    <span className="capitalize">
+                      {job.location || "Remote"}
+                    </span>
                     <span className="text-gray-300">·</span>
                     <span className="capitalize">{job.work_mode || "—"}</span>
                     <span className="text-gray-300">·</span>
-                    <span className="capitalize text-indigo-600 font-medium">{job.job_level} level</span>
+                    <span className="capitalize text-indigo-600 font-medium">
+                      {job.job_level} level
+                    </span>
                     <span className="text-gray-300">·</span>
                     <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-semibold">
-                      {job.hiring_count} open position{job.hiring_count !== 1 ? "s" : ""}
+                      {job.hiring_count} open position
+                      {job.hiring_count !== 1 ? "s" : ""}
                     </span>
                   </div>
                 </div>
@@ -244,12 +328,31 @@ function JobsContent() {
                     </button>
                   )}
                   {job.status === "published" && (
-                    <button
-                      onClick={() => handleClose(job.id)}
-                      className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
-                    >
-                      Close
-                    </button>
+                    <>
+                      <button
+                        onClick={() => handleReprocess(job.id)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Re-analyze JD
+                      </button>
+
+                      <button
+                        onClick={() => viewDetails(job.id)}
+                        disabled={loadingDetail === job.id}
+                        className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
+                      >
+                        {loadingDetail === job.id
+                          ? "Loading…"
+                          : "View analysis"}
+                      </button>
+
+                      <button
+                        onClick={() => handleClose(job.id)}
+                        className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Close
+                      </button>
+                    </>
                   )}
                   {job.status === "closed" && (
                     <button
@@ -267,10 +370,21 @@ function JobsContent() {
           {jobs.length === 0 && !fetchError && (
             <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
               <p className="text-gray-500 font-medium">No job postings yet</p>
-              <p className="text-sm text-gray-400 mt-1">Create your first posting to start hiring.</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Create your first posting to start hiring.
+              </p>
             </div>
           )}
         </div>
+      )}
+      {detailFor && (
+        <ExtractionDetailModal
+          title={detailFor.title}
+          categories={detailFor.categories}
+          parsedData={detailFor.parsed_data}
+          hasEmbedding={detailFor.has_embedding}
+          onClose={() => setDetailFor(null)}
+        />
       )}
     </div>
   );
@@ -285,13 +399,21 @@ function StatusBadge({ status }: { status: string }) {
     closed: "bg-rose-50 text-rose-700 border-rose-200",
   };
   return (
-    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border capitalize ${styles[s] ?? styles.draft}`}>
+    <span
+      className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border capitalize ${styles[s] ?? styles.draft}`}
+    >
       {status}
     </span>
   );
 }
 
-function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCancel: () => void }) {
+function JobForm({
+  onCreated,
+  onCancel,
+}: {
+  onCreated: (j: Job) => void;
+  onCancel: () => void;
+}) {
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -314,9 +436,15 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
     }
     setError("");
     try {
-      const res = await apiFetch("/jobs/", { method: "POST", body: JSON.stringify(form) });
+      const res = await apiFetch("/jobs/", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
       const data = await res.json().catch(() => null);
-      if (!res.ok) { setError(data?.detail || "Failed to create job."); return; }
+      if (!res.ok) {
+        setError(data?.detail || "Failed to create job.");
+        return;
+      }
       onCreated(data);
     } catch {
       setError("Network error. Please try again.");
@@ -330,7 +458,9 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
     >
       <div>
         <h2 className="text-xl font-bold text-gray-900">New Job Listing</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Define your position criteria and requirements</p>
+        <p className="text-xs text-gray-500 mt-0.5">
+          Define your position criteria and requirements
+        </p>
       </div>
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-xs font-medium">
@@ -339,7 +469,9 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
       )}
       <div className="space-y-4">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Job Title</label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+            Job Title
+          </label>
           <input
             placeholder="e.g. Senior Software Engineer"
             value={form.title}
@@ -349,31 +481,43 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
           />
         </div>
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Job Description</label>
+          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+            Job Description
+          </label>
           <textarea
             placeholder="Describe the role, responsibilities, and requirements… (min 50 characters)"
             rows={5}
             value={form.description}
             required
-            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            onChange={(e) =>
+              setForm((p) => ({ ...p, description: e.target.value }))
+            }
             className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
           />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Location</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+              Location
+            </label>
             <input
               placeholder="e.g. Bangalore, India"
               value={form.location}
-              onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, location: e.target.value }))
+              }
               className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Work Mode</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+              Work Mode
+            </label>
             <select
               value={form.work_mode}
-              onChange={(e) => setForm((p) => ({ ...p, work_mode: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, work_mode: e.target.value }))
+              }
               className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Select</option>
@@ -383,10 +527,14 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Level</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+              Level
+            </label>
             <select
               value={form.job_level}
-              onChange={(e) => setForm((p) => ({ ...p, job_level: e.target.value }))}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, job_level: e.target.value }))
+              }
               className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             >
               <option value="">Select</option>
@@ -397,24 +545,36 @@ function JobForm({ onCreated, onCancel }: { onCreated: (j: Job) => void; onCance
             </select>
           </div>
           <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Headcount</label>
+            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
+              Headcount
+            </label>
             <input
               type="number"
               min={1}
               value={form.hiring_count}
-              onChange={(e) => setForm((p) => ({ ...p, hiring_count: Math.max(1, Number(e.target.value)) }))}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  hiring_count: Math.max(1, Number(e.target.value)),
+                }))
+              }
               className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             />
           </div>
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-2">
-        <button type="button" onClick={onCancel}
-          className="text-gray-600 bg-gray-100 hover:bg-gray-200 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="text-gray-600 bg-gray-100 hover:bg-gray-200 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors"
+        >
           Cancel
         </button>
-        <button type="submit"
-          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-colors">
+        <button
+          type="submit"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-colors"
+        >
           Save Posting
         </button>
       </div>

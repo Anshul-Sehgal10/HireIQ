@@ -49,3 +49,12 @@ class JobDetailResponse(JobResponse):
     org_name: str
     org_domain: Optional[str]
     org_verification_status: str
+
+class JobExtractionDetailResponse(BaseModel):
+    id: UUID
+    title: str
+    categories: Optional[list[str]] = None
+    parsed_data: Optional[dict] = None
+    has_embedding: bool
+
+    model_config = {"from_attributes": True}

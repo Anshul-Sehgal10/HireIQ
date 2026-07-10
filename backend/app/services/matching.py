@@ -21,3 +21,37 @@ def cosine_similarity(a: list[float] | None, b: list[float] | None) -> float | N
     similarity = dot / (norm_a * norm_b)
     # Clamp for float drift — cosine similarity is mathematically bounded [-1, 1]
     return max(-1.0, min(1.0, similarity))
+
+# Cross-domain penalty applied when resume and job share no category.
+# Cosine similarity between unrelated professional documents still runs
+# high due to shared vocabulary/structure, not genuine relevance — this
+# flat penalty keeps that from clearing the match_threshold on its own.
+CROSS_DOMAIN_PENALTY = 0.6
+
+
+def compute_match_score(
+    resume_embedding: list[float] | None,
+    jd_embedding: list[float] | None,
+    resume_categories: list[str] | None,
+    job_categories: list[str] | None,
+) -> float | None:
+    """
+    Cosine similarity, adjusted for category overlap.
+
+    If either side has no categories yet (extraction pending/failed), falls
+    back to pure cosine similarity rather than penalizing — consistent with
+    how the feed already treats uncategorized jobs as visible rather than
+    excluded.
+    """
+    similarity = cosine_similarity(resume_embedding, jd_embedding)
+    if similarity is None:
+        return None
+
+    if not resume_categories or not job_categories:
+        return similarity
+
+    overlap = bool(set(resume_categories) & set(job_categories))
+    if not overlap:
+        similarity *= CROSS_DOMAIN_PENALTY
+
+    return similarity

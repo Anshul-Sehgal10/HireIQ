@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
 import ResumeUpload from "@/components/ResumeUpload";
+import ExtractionDetailModal from "@/components/ExtractionDetailModal";
 
 interface ResumeVersion {
   id: string;
@@ -12,6 +13,16 @@ interface ResumeVersion {
   label: string | null;
   created_at: string;
   is_current: boolean;
+  has_embedding: boolean;
+}
+
+interface ResumeDetail {
+  id: string;
+  version_number: number;
+  label: string | null;
+  categories: string[] | null;
+  parsed_data: Record<string, any> | null;
+  has_embedding: boolean;
 }
 
 export default function ResumesPage() {
@@ -30,6 +41,9 @@ function ResumesContent() {
   const [editLabel, setEditLabel] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [detailFor, setDetailFor] = useState<ResumeDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -45,7 +59,9 @@ function ResumesContent() {
     }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
   const startEdit = (rv: ResumeVersion) => {
     setEditingId(rv.id);
@@ -74,14 +90,34 @@ function ResumesContent() {
   const setCurrent = async (id: string) => {
     setBusyId(id);
     try {
-      const res = await apiFetch(`/resumes/${id}/set-current`, { method: "POST" });
+      const res = await apiFetch(`/resumes/${id}/set-current`, {
+        method: "POST",
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to activate resume");
-      setVersions((prev) => prev.map((v) => ({ ...v, is_current: v.id === id })));
+      setVersions((prev) =>
+        prev.map((v) => ({ ...v, is_current: v.id === id })),
+      );
     } catch (e: any) {
       alert(e.message);
     } finally {
       setBusyId(null);
+    }
+  };
+
+  const retryEmbedding = async (id: string) => {
+    setRetryingId(id);
+    try {
+      const res = await apiFetch(`/resumes/${id}/reprocess`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to reprocess resume");
+      setVersions((prev) => prev.map((v) => (v.id === id ? data : v)));
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setRetryingId(null);
     }
   };
 
@@ -102,7 +138,26 @@ function ResumesContent() {
     }
   };
 
-  if (loading) return <div className="p-8 text-gray-400 text-sm animate-pulse">Loading resumes…</div>;
+  const viewDetails = async (id: string) => {
+    setLoadingDetail(id);
+    try {
+      const res = await apiFetch(`/resumes/${id}/details`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load details");
+      setDetailFor(data);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
+  if (loading)
+    return (
+      <div className="p-8 text-gray-400 text-sm animate-pulse">
+        Loading resumes…
+      </div>
+    );
 
   return (
     <div className="max-w-2xl mx-auto p-8">
@@ -124,17 +179,27 @@ function ResumesContent() {
 
       {showUpload && (
         <div className="mb-6 border border-gray-200 rounded-xl p-5 bg-white">
-          <ResumeUpload onUploaded={() => { setShowUpload(false); load(); }} />
+          <ResumeUpload
+            onUploaded={() => {
+              setShowUpload(false);
+              load();
+            }}
+          />
         </div>
       )}
 
       {versions.length === 0 && !showUpload && (
-        <p className="text-gray-400 text-sm text-center py-12">No resumes uploaded yet.</p>
+        <p className="text-gray-400 text-sm text-center py-12">
+          No resumes uploaded yet.
+        </p>
       )}
 
       <div className="space-y-3">
         {versions.map((rv) => (
-          <div key={rv.id} className="border border-gray-200 rounded-xl p-4 bg-white flex items-center justify-between gap-4">
+          <div
+            key={rv.id}
+            className="border border-gray-200 rounded-xl p-4 bg-white flex items-center justify-between gap-4"
+          >
             <div className="min-w-0 flex-1">
               {editingId === rv.id ? (
                 <div className="flex items-center gap-2">
@@ -144,8 +209,19 @@ function ResumesContent() {
                     className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm flex-1"
                     autoFocus
                   />
-                  <button onClick={() => saveLabel(rv.id)} disabled={busyId === rv.id} className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg">Save</button>
-                  <button onClick={() => setEditingId(null)} className="text-xs text-gray-500 px-2">Cancel</button>
+                  <button
+                    onClick={() => saveLabel(rv.id)}
+                    disabled={busyId === rv.id}
+                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="text-xs text-gray-500 px-2"
+                  >
+                    Cancel
+                  </button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -153,28 +229,65 @@ function ResumesContent() {
                     {rv.label ?? `Version ${rv.version_number}`}
                   </p>
                   {rv.is_current && (
-                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium shrink-0">Active</span>
+                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                      Active
+                    </span>
+                  )}
+                  {!rv.has_embedding && (
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">
+                      No embedding — matching disabled
+                    </span>
                   )}
                 </div>
               )}
               <p className="text-xs text-gray-400 mt-0.5 truncate">
-                {new Date(rv.created_at).toLocaleDateString()} · {rv.s3_key.split("/").pop()}
+                {new Date(rv.created_at).toLocaleDateString()} ·{" "}
+                {rv.s3_key.split("/").pop()}
               </p>
             </div>
 
             {editingId !== rv.id && (
               <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => viewDetails(rv.id)}
+                  disabled={loadingDetail === rv.id}
+                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium disabled:opacity-50"
+                >
+                  {loadingDetail === rv.id ? "Loading…" : "View details"}
+                </button>
+                <button
+                  onClick={() => retryEmbedding(rv.id)}
+                  disabled={retryingId === rv.id}
+                  className="text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50"
+                >
+                  {retryingId === rv.id
+                    ? "Re-processing…"
+                    : "Re-parse & re-embed"}
+                </button>
                 {!rv.is_current && (
-                  <button onClick={() => setCurrent(rv.id)} disabled={busyId === rv.id} className="text-xs text-blue-600 hover:text-blue-700 font-medium">
+                  <button
+                    onClick={() => setCurrent(rv.id)}
+                    disabled={busyId === rv.id}
+                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+                  >
                     Set active
                   </button>
                 )}
-                <button onClick={() => startEdit(rv)} className="text-xs text-gray-500 hover:text-gray-700">Rename</button>
+                <button
+                  onClick={() => startEdit(rv)}
+                  className="text-xs text-gray-500 hover:text-gray-700"
+                >
+                  Rename
+                </button>
                 <button
                   onClick={() => remove(rv.id)}
                   disabled={busyId === rv.id || rv.is_current}
                   className="text-xs text-red-500 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title={rv.is_current ? "Set another resume as active first" : undefined}
+                  title={
+                    rv.is_current
+                      ? "Set another resume as active first"
+                      : undefined
+                  }
                 >
                   Delete
                 </button>
@@ -183,6 +296,15 @@ function ResumesContent() {
           </div>
         ))}
       </div>
+      {detailFor && (
+        <ExtractionDetailModal
+          title={detailFor.label ?? `Version ${detailFor.version_number}`}
+          categories={detailFor.categories}
+          parsedData={detailFor.parsed_data}
+          hasEmbedding={detailFor.has_embedding}
+          onClose={() => setDetailFor(null)}
+        />
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, List, Optional
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
+    Boolean,
     DateTime,
     ForeignKey,
     Index,
@@ -50,9 +51,15 @@ class ResumeVersion(UUIDMixin, Base):
 
     parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
-
     label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     
+    # Candidate-facing soft delete. The row (and file) survives — an
+    # Application.resume_version_id may still reference it, and the
+    # employer must always be able to resolve "what did they apply with".
+    # This flag only controls whether it shows up in the candidate's own
+    # UI, freeing them to re-upload without the RESTRICT FK ever blocking them.
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     created_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -70,6 +77,7 @@ class ResumeVersion(UUIDMixin, Base):
         UniqueConstraint("candidate_id", "version_number", name="uq_resume_version"),
         Index("ix_resume_versions_candidate_id", "candidate_id"),
         Index("ix_resume_versions_categories", "categories", postgresql_using="gin"),
+        Index("ix_resume_versions_candidate_id_is_deleted", "candidate_id", "is_deleted"),
     )
 
     def __repr__(self) -> str:

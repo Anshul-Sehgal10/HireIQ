@@ -29,8 +29,19 @@ You are parsing a candidate's resume into a normalized structured format.
 Extract all available information faithfully — do not invent data that
 isn't present; leave fields empty/null instead of guessing.
 
-Also assign 1-3 job categories that best describe this candidate's primary
-domain(s) of experience, chosen strictly from the allowed category list.
+Also assign job categories that best describe this candidate's domain(s) of
+experience, chosen strictly from the allowed category list. Most candidates
+span more than one domain — err toward capturing that breadth:
+- Assign 2-3 categories whenever the resume reasonably supports it (e.g. a
+  backend engineer who also writes deployment scripts and touches AWS should
+  get both `backend` and `devops_cloud`; someone with real experience on
+  both ends of the stack should get `frontend` and `backend`, reserving
+  `fullstack` for when that's literally how their experience is framed).
+- Only assign a single category when the resume is narrowly and
+  unambiguously focused on one domain with no meaningful secondary skill set.
+- Accuracy comes first — never invent a category the resume doesn't
+  support just to hit a count — but don't default to the single most
+  obvious category out of caution either.
 
 Resume text:
 ---
@@ -43,8 +54,17 @@ You are parsing a job description into a normalized structured format.
 Extract responsibilities and required/preferred skills faithfully — do not
 invent requirements that aren't stated or clearly implied.
 
-Also assign 1-3 job categories that best describe this role's primary
-domain(s), chosen strictly from the allowed category list.
+Also assign job categories that best describe this role's domain(s), chosen
+strictly from the allowed category list. Most roles touch more than one
+domain — err toward capturing that breadth:
+- Assign 2-3 categories whenever the description reasonably supports it
+  (e.g. a backend role that also owns CI/CD and cloud infra should get both
+  `backend` and `devops_cloud`).
+- Only assign a single category when the role is narrowly and unambiguously
+  focused on one domain.
+- Accuracy comes first — never invent a category the description doesn't
+  support just to hit a count — but don't default to the single most
+  obvious category out of caution either.
 
 Job description text:
 ---

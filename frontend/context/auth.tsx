@@ -105,6 +105,22 @@ const AuthContext = createContext<AuthCtx>({
 });
 
 // ---------------------------------------------------------------------------
+// Refresh helper
+// ---------------------------------------------------------------------------
+
+async function callRefreshEndpoint(): Promise<boolean> {
+  try {
+    const res = await fetch(apiUrl("/auth/refresh"), {
+      method: "POST",
+      credentials: "include", // sends the HttpOnly refresh_token cookie
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -112,59 +128,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadUser = useCallback((didRefresh = false) => {
+  const loadUser = useCallback(async (didRefresh: boolean = false): Promise<void> => {
     const token = getAccessTokenFromCookie();
     if (!token) {
       setLoading(false);
       return;
     }
 
-    try {
-      const payload = decodeJwt(token);
-      if (!payload) {
+    const payload = decodeJwt(token);
+    if (!payload) {
+      localStorage.removeItem("access_token");
+      clearAuthCookie();
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
+    if (payload.exp * 1000 < Date.now()) {
+      if (didRefresh) {
+        // Already tried refreshing once this pass — give up and force re-login
         localStorage.removeItem("access_token");
         clearAuthCookie();
         setUser(null);
         setLoading(false);
         return;
       }
-
-      if (payload.exp * 1000 < Date.now()) {
-        if (didRefresh) {
-          // Already tried refreshing once — give up and force re-login
-          localStorage.removeItem("access_token");
-          clearAuthCookie();
-          setUser(null);
-          setLoading(false);
-          return;
-        }
-        return;
+      const refreshed = await callRefreshEndpoint();
+      if (refreshed) {
+        await loadUser(true); // cookie is now fresh — retry once
+      } else {
+        clearAuthCookie();
+        setUser(null);
+        setLoading(false);
       }
-      setUser(payload);
-    } catch {
-      localStorage.removeItem("access_token");
-      clearAuthCookie();
-      setUser(null);
-    } finally {
-      setLoading(false);
+      return;
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+    setUser(payload);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     loadUser();
   }, [loadUser]);
 
-  // reloadUser is a stable function that can be called to refresh the user state after login or token refresh
+  // Proactively refresh ~1 minute before the access token expires, so the
+  // frontend-domain cookie proxy.ts reads never goes stale mid-session.
+  useEffect(() => {
+    if (!user) return;
+    const msUntilExpiry = user.exp * 1000 - Date.now();
+    const delay = Math.max(0, msUntilExpiry - 60_000);
+
+    const timer = setTimeout(async () => {
+      const ok = await callRefreshEndpoint();
+      if (ok) {
+        await loadUser(true);
+      } else {
+        clearAuthCookie();
+        setUser(null);
+      }
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [user, loadUser]);
+
   const reloadUser = useCallback(() => { loadUser(); }, [loadUser]);
 
   const logout = useCallback(() => {
     clearAuthCookie();
     setUser(null);
 
-    // 2. Tell the backend to clear the HttpOnly refresh_token cookie
     void fetch(apiUrl("/auth/logout"), {
       method: "POST",
-      credentials: "include", // sends the HttpOnly cookie so backend can clear it
+      credentials: "include",
     }).finally(() => {
       window.location.href = "/auth/login";
     });

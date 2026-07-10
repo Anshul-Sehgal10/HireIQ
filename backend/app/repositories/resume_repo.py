@@ -46,11 +46,12 @@ async def get_resume_version(
     resume_version_id: uuid.UUID,
     candidate_id: uuid.UUID,
 ) -> Optional[ResumeVersion]:
-    """Fetches a version scoped to the candidate — implicit ownership check."""
+    """Fetches a non-deleted version scoped to the candidate."""
     result = await db.execute(
         select(ResumeVersion).where(
             ResumeVersion.id == resume_version_id,
             ResumeVersion.candidate_id == candidate_id,
+            ResumeVersion.is_deleted.is_(False),
         )
     )
     return result.scalar_one_or_none()
@@ -59,10 +60,13 @@ async def get_resume_version(
 async def list_resume_versions(
     db: AsyncSession, candidate_id: uuid.UUID
 ) -> List[ResumeVersion]:
-    """All versions for a candidate, newest first."""
+    """All non-deleted versions for a candidate, newest first."""
     result = await db.execute(
         select(ResumeVersion)
-        .where(ResumeVersion.candidate_id == candidate_id)
+        .where(
+            ResumeVersion.candidate_id == candidate_id,
+            ResumeVersion.is_deleted.is_(False),
+        )
         .order_by(ResumeVersion.version_number.desc())
     )
     return list(result.scalars().all())
@@ -116,4 +120,13 @@ async def count_applications_for_resume_version(
 
 async def delete_resume_version(db: AsyncSession, rv: ResumeVersion) -> None:
     await db.delete(rv)
+    await db.commit()
+
+
+async def soft_delete_resume_version(db: AsyncSession, rv: ResumeVersion) -> None:
+    """
+    Hides the resume from the candidate's own view without touching the row,
+    the file in storage, or any Application.resume_version_id references.
+    """
+    rv.is_deleted = True
     await db.commit()

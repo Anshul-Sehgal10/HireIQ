@@ -1,4 +1,5 @@
 from typing import Annotated, List, Optional
+from app.core.logging import logger
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -6,7 +7,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
-from app.core.logging import logger
 from app.db.models.candidate_profiles import CandidateProfile
 from app.repositories.job_repo import (
     close_job,
@@ -16,14 +16,15 @@ from app.repositories.job_repo import (
     list_published_jobs,
     publish_job,
     update_job,
+    reprocess_job,
+    get_job_with_org,
 )
 from app.repositories.org_repo import get_org_for_user
-from app.schemas.job import JobCreate, JobResponse, JobUpdate
 
-from app.repositories.job_repo import get_job_with_org
-from app.schemas.job import JobDetailResponse
+from app.schemas.job import JobCreate, JobResponse, JobUpdate, JobDetailResponse, JobExtractionDetailResponse
 from app.schemas.matching import RelevanceCheckResponse
-from app.services.matching import cosine_similarity
+
+from app.services.matching import compute_match_score
 from app.services.resume_selection import resolve_resume_version
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -118,7 +119,10 @@ async def check_relevance(
         raise HTTPException(404, "Candidate profile not found")
 
     resume_version = await resolve_resume_version(db, profile, resume_version_id)
-    match_score = cosine_similarity(resume_version.embedding, job.jd_embedding)
+    match_score = compute_match_score(
+        resume_version.embedding, job.jd_embedding,
+        resume_version.categories, job.categories,
+    )
     meets_threshold = match_score is not None and match_score >= job.match_threshold
 
     return RelevanceCheckResponse(
@@ -173,3 +177,47 @@ async def close(
     if not org or job.org_id != org.id:
         raise HTTPException(403, "Not your job")
     return await close_job(db, job)
+
+
+@router.post("/{job_id}/reprocess", response_model=JobResponse)
+async def reprocess(
+    job_id: UUID,
+    user: EmployerUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Re-runs JD extraction + embedding without unpublishing/republishing."""
+    job = await get_job(db, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    org = await get_org_for_user(db, user.id)
+    if not org or job.org_id != org.id:
+        raise HTTPException(403, "Not your job")
+
+    job, success = await reprocess_job(db, job)
+    if not success:
+        raise HTTPException(422, "Reprocessing failed — check the LLM service configuration and try again.")
+    return job
+
+
+@router.get("/{job_id}/details", response_model=JobExtractionDetailResponse)
+async def get_details(
+    job_id: UUID,
+    user: EmployerUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Returns the LLM's structured extraction + assigned categories for this
+    job — scoped to the posting org, same as update/publish/close."""
+    job = await get_job(db, job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    org = await get_org_for_user(db, user.id)
+    if not org or job.org_id != org.id:
+        raise HTTPException(403, "Not your job")
+
+    return JobExtractionDetailResponse(
+        id=job.id,
+        title=job.title,
+        categories=job.categories,
+        parsed_data=job.parsed_data,
+        has_embedding=job.jd_embedding is not None,
+    )

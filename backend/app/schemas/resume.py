@@ -32,6 +32,17 @@ class ResumeVersionResponse(BaseModel):
     created_at: datetime
     label: Optional[str] = None
     is_current: bool     # True if this is the candidate's active resume
+    has_embedding: bool  # lets the UI show "retry embedding"
+
+    model_config = {"from_attributes": True}
+
+class ResumeExtractionDetailResponse(BaseModel):
+    id: uuid.UUID
+    version_number: int
+    label: Optional[str] = None
+    categories: Optional[list[str]] = None
+    parsed_data: Optional[dict] = None
+    has_embedding: bool
 
     model_config = {"from_attributes": True}
 

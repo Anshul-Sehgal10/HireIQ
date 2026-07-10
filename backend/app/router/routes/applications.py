@@ -30,7 +30,7 @@ from app.schemas.application import (
     ApplicationWithJobResponse,
     EmployerApplicationResponse,
 )
-from app.services.matching import cosine_similarity
+from app.services.matching import compute_match_score
 from app.services.resume_selection import resolve_resume_version
 from app.repositories.resume_repo import increment_override_usage
 
@@ -71,8 +71,10 @@ def _build_with_job_response(
     )
 
 def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
-    """Returns the cosine similarity score between a resume and a job posting, or None if either embedding is missing."""
-    return cosine_similarity(resume_version.embedding, job.jd_embedding)
+    return compute_match_score(
+        resume_version.embedding, job.jd_embedding,
+        resume_version.categories, job.categories,
+    )
 
 # ---------------------------------------------------------------------------
 # Candidate — apply
