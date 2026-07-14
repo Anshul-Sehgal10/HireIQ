@@ -141,6 +141,20 @@ function JobsContent() {
     }
   };
 
+  const handleGenerateScenario = async (id: string) => {
+    const res = await apiFetch(`/jobs/${id}/scenario/generate`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || "Scenario generation failed.");
+      return;
+    }
+    alert(
+      `Generated:\n\n${data.question_text}\n\nTime limit: ${data.time_limit_seconds}s`,
+    );
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6 md:p-12 min-h-screen bg-gray-50/50">
       {/* Header */}
@@ -329,6 +343,12 @@ function JobsContent() {
                   )}
                   {job.status === "published" && (
                     <>
+                      <button
+                        onClick={() => handleGenerateScenario(job.id)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Generate scenario (test)
+                      </button>
                       <button
                         onClick={() => handleReprocess(job.id)}
                         className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"

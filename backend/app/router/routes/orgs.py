@@ -215,7 +215,7 @@ async def accept_invite(
     if invite.status != InviteStatus.PENDING:
         raise HTTPException(400, f"Invite is {invite.status.value}")
 
-    if invite.expires_at and invite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None):
+    if invite.expires_at and invite.expires_at < datetime.now(timezone.utc).replace(tzinfo=None): #type: ignore
         raise HTTPException(400, "This invite has expired")
 
     if invite.invited_email.lower() != user.email.lower():
