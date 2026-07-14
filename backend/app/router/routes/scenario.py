@@ -70,3 +70,22 @@ async def get_current(
     if not question:
         raise HTTPException(404, "No scenario question generated yet for this job")
     return question
+
+@router.get("/{job_id}/scenario/preview", response_model=ScenarioQuestionResponse)
+async def get_preview(
+    job_id: UUID,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Candidate-facing preview of the active scenario question — lets a
+    candidate see what they'll be asked before applying. Deliberately no
+    auth/ownership check, mirroring GET /jobs/{job_id} which is also public;
+    404s if scenario mode is off or no question has been generated yet.
+    """
+    job = await get_job(db, job_id)
+    if not job or not job.scenario_enabled:
+        raise HTTPException(404, "This job does not have a scenario question")
+    question = await scenario_repo.get_active_question(db, job.id)
+    if not question:
+        raise HTTPException(404, "No scenario question generated yet for this job")
+    return question

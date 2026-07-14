@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
-import EmployerJobDetailModal from "@/components/EmployerJobDetailModal";
+import ExtractionDetailModal from "@/components/ExtractionDetailModal";
 
 interface JobDetail {
   id: string;
@@ -21,7 +21,6 @@ interface Job {
   work_mode: string | null;
   job_level: string | null;
   hiring_count: number;
-  scenario_enabled: boolean;
 }
 
 interface Application {
@@ -50,11 +49,12 @@ function JobsContent() {
   const [showForm, setShowForm] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null); // full-page applicants view
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [applicants, setApplicants] = useState<Application[]>([]);
   const [loadingApplicants, setLoadingApplicants] = useState(false);
 
-  const [detailJobId, setDetailJobId] = useState<string | null>(null); // card-click modal
+  const [detailFor, setDetailFor] = useState<JobDetail | null>(null);
+  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch("/jobs/mine")
@@ -65,19 +65,20 @@ function JobsContent() {
         if (Array.isArray(data)) {
           setJobs(data);
           setFetchError(null);
-        } else setFetchError("Unexpected response from server.");
+        } else {
+          setFetchError("Unexpected response from server.");
+        }
       })
-      .catch((err) =>
-        setFetchError(err.message || "A network error occurred."),
-      );
+      .catch((err) => {
+        setFetchError(err.message || "A network error occurred.");
+      });
   }, []);
 
   const handlePublish = async (id: string) => {
     const res = await apiFetch(`/jobs/${id}/publish`, { method: "POST" });
     if (res.ok) {
-      const updated: Job = await res.json();
       setJobs((prev) =>
-        prev.map((j) => (j.id === id ? { ...j, ...updated } : j)),
+        prev.map((j) => (j.id === id ? { ...j, status: "published" } : j)),
       );
     } else {
       const d = await res.json().catch(() => ({}));
@@ -111,17 +112,47 @@ function JobsContent() {
   };
 
   const handleViewApplicants = async (jobId: string) => {
-    setDetailJobId(null);
     setSelectedJobId(jobId);
     setLoadingApplicants(true);
     try {
       const res = await apiFetch(`/applications/job/${jobId}`);
       const data = await res.json().catch(() => null);
-      if (res.ok && Array.isArray(data)) setApplicants(data);
-      else alert(data?.detail || "Failed to load applicants.");
+      if (res.ok && Array.isArray(data)) {
+        setApplicants(data);
+      } else {
+        alert(data?.detail || "Failed to load applicants.");
+      }
     } finally {
       setLoadingApplicants(false);
     }
+  };
+
+  const viewDetails = async (id: string) => {
+    setLoadingDetail(id);
+    try {
+      const res = await apiFetch(`/jobs/${id}/details`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load details");
+      setDetailFor(data);
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setLoadingDetail(null);
+    }
+  };
+
+  const handleGenerateScenario = async (id: string) => {
+    const res = await apiFetch(`/jobs/${id}/scenario/generate`, {
+      method: "POST",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert(data.detail || "Scenario generation failed.");
+      return;
+    }
+    alert(
+      `Generated:\n\n${data.question_text}\n\nTime limit: ${data.time_limit_seconds}s`,
+    );
   };
 
   return (
@@ -136,170 +167,245 @@ function JobsContent() {
             Manage your active listings and candidate pipelines
           </p>
         </div>
-        {selectedJobId ? (
-          /* applicants view */
-          <div className="space-y-6">
-            <button
-              onClick={() => {
-                setSelectedJobId(null);
-                setApplicants([]);
-              }}
-              className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+        {!selectedJobId && (
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-all"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="2.5"
+              stroke="currentColor"
             >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth="2.5"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
-                />
-              </svg>
-              Back to All Job Postings
-            </button>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"
+              />
+            </svg>
+            Create New Posting
+          </button>
+        )}
+      </div>
 
-            <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-gray-200 bg-gray-50/50">
-                <h2 className="text-xl font-bold text-gray-900">
-                  Applicants for:{" "}
-                  <span className="text-indigo-600 font-medium">
-                    {jobs.find((j) => j.id === selectedJobId)?.title}
-                  </span>
-                </h2>
+      {fetchError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-6">
+          <strong>Error:</strong> {fetchError}
+        </div>
+      )}
+
+      {selectedJobId ? (
+        /* Applicants view */
+        <div className="space-y-6">
+          <button
+            onClick={() => {
+              setSelectedJobId(null);
+              setApplicants([]);
+            }}
+            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="2.5"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"
+              />
+            </svg>
+            Back to All Job Postings
+          </button>
+
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50/50">
+              <h2 className="text-xl font-bold text-gray-900">
+                Applicants for:{" "}
+                <span className="text-indigo-600 font-medium">
+                  {jobs.find((j) => j.id === selectedJobId)?.title}
+                </span>
+              </h2>
+            </div>
+
+            {loadingApplicants ? (
+              <div className="py-16 text-center text-gray-500 text-sm flex flex-col items-center gap-3">
+                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+                Loading applicants…
               </div>
-
-              {loadingApplicants ? (
-                <div className="py-16 text-center text-gray-500 text-sm flex flex-col items-center gap-3">
-                  <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                  Loading applicants…
-                </div>
-              ) : applicants.length === 0 ? (
-                <div className="py-16 text-center">
-                  <p className="text-gray-400 text-sm">
-                    No applications received yet.
-                  </p>
-                </div>
-              ) : (
-                <div className="divide-y divide-gray-100">
-                  {applicants.map((app) => (
-                    <div
-                      key={app.id}
-                      className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/40 transition-colors"
-                    >
-                      <div className="space-y-0.5">
-                        <h3 className="font-semibold text-gray-900">
-                          {app.applicant_name}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          {app.applicant_email}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          Applied{" "}
-                          {new Date(app.applied_at).toLocaleDateString()}
-                          {app.match_score != null && (
-                            <span className="ml-2 text-indigo-500 font-medium">
-                              · {Math.round(app.match_score * 100)}% match
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {app.is_override && (
-                          <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                            Override
+            ) : applicants.length === 0 ? (
+              <div className="py-16 text-center">
+                <p className="text-gray-400 text-sm">
+                  No applications received yet.
+                </p>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {applicants.map((app) => (
+                  <div
+                    key={app.id}
+                    className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/40 transition-colors"
+                  >
+                    <div className="space-y-0.5">
+                      <h3 className="font-semibold text-gray-900">
+                        {app.applicant_name}
+                      </h3>
+                      <p className="text-sm text-gray-500">
+                        {app.applicant_email}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Applied {new Date(app.applied_at).toLocaleDateString()}
+                        {app.match_score != null && (
+                          <span className="ml-2 text-indigo-500 font-medium">
+                            · {Math.round(app.match_score * 100)}% match
                           </span>
                         )}
-                        <span className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
-                          {app.status}
-                        </span>
-                      </div>
+                      </p>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {showForm && (
-              <JobForm
-                onCreated={(job) => {
-                  setJobs((prev) => [job, ...prev]);
-                  setShowForm(false);
-                }}
-                onCancel={() => setShowForm(false)}
-              />
-            )}
-
-            {jobs.map((job) => (
-              <div
-                key={job.id}
-                onClick={() => setDetailJobId(job.id)}
-                className="group bg-white border border-gray-200 hover:border-gray-300 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
-              >
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-3 flex-wrap">
-                      <h2 className="text-lg font-bold text-gray-900 tracking-tight">
-                        {job.title}
-                      </h2>
-                      <StatusBadge status={job.status} />
-                      {job.scenario_enabled && (
-                        <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full font-semibold">
-                          Scenario question
+                    <div className="flex items-center gap-3">
+                      {app.is_override && (
+                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                          Override
                         </span>
                       )}
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-                      <span className="capitalize">
-                        {job.location || "Remote"}
-                      </span>
-                      <span className="text-gray-300">·</span>
-                      <span className="capitalize">{job.work_mode || "—"}</span>
-                      <span className="text-gray-300">·</span>
-                      <span className="capitalize text-indigo-600 font-medium">
-                        {job.job_level} level
-                      </span>
-                      <span className="text-gray-300">·</span>
-                      <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-semibold">
-                        {job.hiring_count} open position
-                        {job.hiring_count !== 1 ? "s" : ""}
+                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
+                        {app.status}
                       </span>
                     </div>
                   </div>
-                  <span className="text-xs text-gray-400 shrink-0 group-hover:text-gray-600 transition-colors">
-                    Click to view →
-                  </span>
-                </div>
-              </div>
-            ))}
-
-            {jobs.length === 0 && !fetchError && (
-              <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
-                <p className="text-gray-500 font-medium">No job postings yet</p>
-                <p className="text-sm text-gray-400 mt-1">
-                  Create your first posting to start hiring.
-                </p>
+                ))}
               </div>
             )}
           </div>
-        )}
+        </div>
+      ) : (
+        /* Jobs board */
+        <div className="space-y-4">
+          {showForm && (
+            <JobForm
+              onCreated={(job) => {
+                setJobs((prev) => [job, ...prev]);
+                setShowForm(false);
+              }}
+              onCancel={() => setShowForm(false)}
+            />
+          )}
 
-        {detailJobId && (
-          <EmployerJobDetailModal
-            jobId={detailJobId}
-            onClose={() => setDetailJobId(null)}
-            onPublish={handlePublish}
-            onCloseJob={handleClose}
-            onReprocess={handleReprocess}
-            onViewApplicants={handleViewApplicants}
-          />
-        )}
-      </div>
+          {jobs.map((job) => (
+            <div
+              key={job.id}
+              className="group bg-white border border-gray-200 hover:border-gray-300 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200"
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h2 className="text-lg font-bold text-gray-900 tracking-tight">
+                      {job.title}
+                    </h2>
+                    <StatusBadge status={job.status} />
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
+                    <span className="capitalize">
+                      {job.location || "Remote"}
+                    </span>
+                    <span className="text-gray-300">·</span>
+                    <span className="capitalize">{job.work_mode || "—"}</span>
+                    <span className="text-gray-300">·</span>
+                    <span className="capitalize text-indigo-600 font-medium">
+                      {job.job_level} level
+                    </span>
+                    <span className="text-gray-300">·</span>
+                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-semibold">
+                      {job.hiring_count} open position
+                      {job.hiring_count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleViewApplicants(job.id)}
+                    className="inline-flex items-center gap-1.5 text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                  >
+                    View Applicants
+                  </button>
+                  {job.status === "draft" && (
+                    <button
+                      onClick={() => handlePublish(job.id)}
+                      className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+                    >
+                      Publish
+                    </button>
+                  )}
+                  {job.status === "published" && (
+                    <>
+                      <button
+                        onClick={() => handleGenerateScenario(job.id)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-teal-50 hover:bg-teal-100 border border-teal-200 text-teal-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Generate scenario (test)
+                      </button>
+                      <button
+                        onClick={() => handleReprocess(job.id)}
+                        className="inline-flex items-center gap-1.5 text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Re-analyze JD
+                      </button>
+
+                      <button
+                        onClick={() => viewDetails(job.id)}
+                        disabled={loadingDetail === job.id}
+                        className="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
+                      >
+                        {loadingDetail === job.id
+                          ? "Loading…"
+                          : "View analysis"}
+                      </button>
+
+                      <button
+                        onClick={() => handleClose(job.id)}
+                        className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
+                      >
+                        Close
+                      </button>
+                    </>
+                  )}
+                  {job.status === "closed" && (
+                    <button
+                      onClick={() => handlePublish(job.id)}
+                      className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+                    >
+                      Reopen
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {jobs.length === 0 && !fetchError && (
+            <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
+              <p className="text-gray-500 font-medium">No job postings yet</p>
+              <p className="text-sm text-gray-400 mt-1">
+                Create your first posting to start hiring.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+      {detailFor && (
+        <ExtractionDetailModal
+          title={detailFor.title}
+          categories={detailFor.categories}
+          parsedData={detailFor.parsed_data}
+          hasEmbedding={detailFor.has_embedding}
+          onClose={() => setDetailFor(null)}
+        />
+      )}
     </div>
   );
 }

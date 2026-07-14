@@ -20,6 +20,7 @@ interface Job {
   salary_max: number | null;
   org_id: string;
   categories: string[] | null;
+  scenario_enabled: boolean;
 }
 
 interface Application {
@@ -266,6 +267,11 @@ function JobFeed() {
                   <h2 className="font-semibold text-gray-900 text-base">
                     {job.title}
                   </h2>
+                  {job.scenario_enabled && (
+                    <span className="ml-2 inline-block text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium align-middle">
+                      Scenario question
+                    </span>
+                  )}
                   {meta && (
                     <p className="text-sm text-gray-500 mt-0.5">{meta}</p>
                   )}
