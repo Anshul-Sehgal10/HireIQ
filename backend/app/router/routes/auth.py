@@ -1,3 +1,11 @@
+"""
+Authentication routes.
+
+Provides endpoints for user registration, login, token refresh,
+profile management, and logout. Cookie handling and JWT generation
+are centralized through helper functions to keep endpoint logic clean.
+"""
+
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +26,10 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 # Helper function to inject cookies into responses
 def set_refresh_cookie(response: Response, refresh_token: str):
+    """Store the refresh token in a secure HttpOnly cookie.
+
+    Any existing refresh cookie is deleted first to avoid stale values.
+    """
     response.delete_cookie(
         key="refresh_token",
         path="/"
@@ -36,6 +48,7 @@ def set_refresh_cookie(response: Response, refresh_token: str):
 # Add this helper alongside set_refresh_cookie:
 
 def set_access_cookie(response: Response, access_token: str):
+    """Store the short-lived access token in a browser-readable cookie."""
     response.set_cookie(
         key="access_token",
         value=access_token,
@@ -47,6 +60,7 @@ def set_access_cookie(response: Response, access_token: str):
     )
 
 def clear_access_cookie(response: Response):
+    """Remove the access token cookie from the client."""
     response.delete_cookie(key="access_token", path="/")
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -55,6 +69,10 @@ async def register(
     response: Response,                          # add this
     db: Annotated[AsyncSession, Depends(get_db)]
 ):
+    """
+    Register a new local user and immediately authenticate them by
+    issuing access and refresh tokens.
+    """
     existing = await get_user_by_email(db, body.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -233,6 +251,9 @@ async def update_me(
 
     updated_user = await update_user(db, user.id, updates)
 
+    if not updated_user:
+        raise HTTPException(500, "Failed to update user")
+
     # Re-issue tokens if email or name changed (both are in the JWT payload)
     if "email" in updates or "full_name" in updates:
         user_data = {
@@ -271,7 +292,8 @@ async def logout(
                 expires_at = datetime.fromtimestamp(exp, tz=timezone.utc)
                 await blacklist_token(db, jti, expires_at)
         except Exception:
-            pass  # even if decoding fails, still clear the cookies
-
-    response.delete_cookie(key="refresh_token", path="/")
-    clear_access_cookie(response)
+            pass
+        finally:
+            # even if decoding fails, still clear the cookies
+            response.delete_cookie(key="refresh_token", path="/")
+            clear_access_cookie(response)

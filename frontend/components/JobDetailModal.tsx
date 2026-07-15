@@ -46,11 +46,6 @@ interface Props {
   }) => void;
 }
 
-interface ScenarioPreview {
-  question_text: string;
-  time_limit_seconds: number;
-}
-
 export default function JobDetailModal({
   jobId,
   resumeVersions,
@@ -72,18 +67,6 @@ export default function JobDetailModal({
   const [overridesRemaining, setOverridesRemaining] = useState<number | null>(
     null,
   );
-
-  const [scenario, setScenario] = useState<ScenarioPreview | null>(null);
-  const [scenarioLoading, setScenarioLoading] = useState(false);
-  const [showScenario, setShowScenario] = useState(false);
-
-  useEffect(() => {
-    if (!detail?.scenario_enabled) return;
-    setScenarioLoading(true);
-    apiFetch(`/jobs/${jobId}/scenario/preview`)
-      .then(async (res) => setScenario(res.ok ? await res.json() : null))
-      .finally(() => setScenarioLoading(false));
-  }, [detail?.scenario_enabled, jobId]);
 
   useEffect(() => {
     (async () => {
@@ -216,41 +199,14 @@ export default function JobDetailModal({
 
             {detail.scenario_enabled && (
               <div className="border-t border-gray-100 pt-4 mb-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide">
-                    Includes a scenario question
-                  </p>
-                  {scenario && (
-                    <button
-                      onClick={() => setShowScenario((v) => !v)}
-                      className="text-xs text-teal-600 hover:text-teal-700 font-medium"
-                    >
-                      {showScenario ? "Hide" : "Preview question"}
-                    </button>
-                  )}
-                </div>
-                {scenarioLoading && (
-                  <p className="text-xs text-gray-400 mt-1 animate-pulse">
-                    Loading…
-                  </p>
-                )}
-                {!scenarioLoading && !scenario && (
-                  <p className="text-xs text-gray-400 mt-1">
-                    This role includes a scenario question — the employer hasn't
-                    published it yet.
-                  </p>
-                )}
-                {showScenario && scenario && (
-                  <div className="bg-teal-50 border border-teal-100 rounded-lg p-3 mt-2">
-                    <p className="text-sm text-gray-800">
-                      {scenario.question_text}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1.5">
-                      You'll have {scenario.time_limit_seconds} seconds to
-                      answer.
-                    </p>
-                  </div>
-                )}
+                <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide">
+                  Includes a scenario question
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  After you apply, you'll be asked a role-specific scenario
+                  question with a time limit. It's generated when you apply, so
+                  there's nothing to preview beforehand.
+                </p>
               </div>
             )}
 

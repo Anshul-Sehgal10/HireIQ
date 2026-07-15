@@ -250,9 +250,9 @@ function JobFeed() {
       )}
 
       <div className="space-y-4">
-        {jobs.map((job) => {
-          const applied = appliedJobIds.has(job.id);
-          const meta = [job.location, job.work_mode, job.job_level]
+        {jobs.map((job: Job) => {
+          const applied: boolean = appliedJobIds.has(job.id);
+          const meta: string = [job.location, job.work_mode, job.job_level]
             .filter(Boolean)
             .join(" · ");
 
@@ -277,7 +277,7 @@ function JobFeed() {
                   )}
                   {job.categories && job.categories.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {job.categories.map((category) => (
+                      {job.categories.map((category: string) => (
                         <span
                           key={category}
                           className="inline-block bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded-full"

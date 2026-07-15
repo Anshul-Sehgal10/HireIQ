@@ -19,13 +19,6 @@ interface JobDetail {
   categories?: string[] | null;
 }
 
-interface ScenarioQuestion {
-  id: string;
-  question_text: string;
-  time_limit_seconds: number;
-  generated_at: string;
-}
-
 interface Props {
   jobId: string;
   onClose: () => void;
@@ -42,10 +35,6 @@ export default function EmployerJobDetailModal({
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
-
-  const [scenario, setScenario] = useState<ScenarioQuestion | null>(null);
-  const [scenarioLoading, setScenarioLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
 
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [analysis, setAnalysis] = useState<{ categories: string[] | null; parsed_data: Record<string, any> | null; has_embedding: boolean } | null>(null);
@@ -64,35 +53,9 @@ export default function EmployerJobDetailModal({
     }
   };
 
-  const loadScenario = async () => {
-    setScenarioLoading(true);
-    try {
-      const res = await apiFetch(`/jobs/${jobId}/scenario`);
-      if (res.ok) setScenario(await res.json());
-      else setScenario(null);
-    } finally {
-      setScenarioLoading(false);
-    }
-  };
-
   useEffect(() => {
     loadDetail();
-    loadScenario();
   }, [jobId]);
-
-  const handleGenerateScenario = async () => {
-    setGenerating(true);
-    try {
-      const res = await apiFetch(`/jobs/${jobId}/scenario/generate`, { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Scenario generation failed");
-      setScenario(data);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setGenerating(false);
-    }
-  };
 
   const loadAnalysis = async () => {
     setAnalysisLoading(true);
@@ -113,7 +76,7 @@ export default function EmployerJobDetailModal({
     setActionBusy(true);
     try {
       await fn();
-      await loadDetail(); // status/categories may have changed
+      await loadDetail();
     } finally {
       setActionBusy(false);
     }
@@ -158,9 +121,9 @@ export default function EmployerJobDetailModal({
               <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.description}</p>
             </div>
 
-            {/* Scenario section */}
+            {/* Scenario status — no content shown, generated lazily at apply-time */}
             <div className="border-t border-gray-100 pt-4 mb-4">
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scenario question</p>
                 <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                   detail.scenario_enabled ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500"
@@ -168,81 +131,41 @@ export default function EmployerJobDetailModal({
                   {detail.scenario_enabled ? "Enabled" : "Disabled"}
                 </span>
               </div>
-
               {detail.scenario_enabled && (
-                <>
-                  {scenarioLoading ? (
-                    <p className="text-xs text-gray-400 animate-pulse">Checking for a question…</p>
-                  ) : scenario ? (
-                    <div className="bg-teal-50 border border-teal-100 rounded-lg p-3 mb-2">
-                      <p className="text-sm text-gray-800">{scenario.question_text}</p>
-                      <p className="text-xs text-gray-500 mt-1.5">Time limit: {scenario.time_limit_seconds}s</p>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-gray-400 mb-2">No question generated yet.</p>
-                  )}
-                  <button
-                    onClick={handleGenerateScenario}
-                    disabled={generating}
-                    className="text-xs bg-teal-600 hover:bg-teal-500 disabled:opacity-50 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    {generating ? "Generating…" : scenario ? "Regenerate question" : "Generate question"}
-                  </button>
-                </>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Generated automatically for the first applicant. Content isn't shown here to keep
+                  it consistent across candidates.
+                </p>
               )}
             </div>
 
-            {/* Actions */}
             <div className="border-t border-gray-100 pt-4 flex flex-wrap gap-2">
-              <button
-                onClick={() => onViewApplicants(detail.id)}
-                className="text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 px-3.5 py-2 rounded-xl font-semibold transition-colors"
-              >
+              <button onClick={() => onViewApplicants(detail.id)} className="text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 px-3.5 py-2 rounded-xl font-semibold transition-colors">
                 View Applicants
               </button>
 
               {detail.status === "draft" && (
-                <button
-                  onClick={() => runAction(() => onPublish(detail.id))}
-                  disabled={actionBusy}
-                  className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => runAction(() => onPublish(detail.id))} disabled={actionBusy} className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50">
                   {actionBusy ? "Publishing…" : "Publish"}
                 </button>
               )}
 
               {detail.status === "published" && (
                 <>
-                  <button
-                    onClick={() => runAction(() => onReprocess(detail.id))}
-                    disabled={actionBusy}
-                    className="text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={() => runAction(() => onReprocess(detail.id))} disabled={actionBusy} className="text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
                     Re-analyze JD
                   </button>
-                  <button
-                    onClick={loadAnalysis}
-                    disabled={analysisLoading}
-                    className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={loadAnalysis} disabled={analysisLoading} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
                     {analysisLoading ? "Loading…" : "View analysis"}
                   </button>
-                  <button
-                    onClick={() => runAction(() => onCloseJob(detail.id))}
-                    disabled={actionBusy}
-                    className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50"
-                  >
+                  <button onClick={() => runAction(() => onCloseJob(detail.id))} disabled={actionBusy} className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
                     Close
                   </button>
                 </>
               )}
 
               {detail.status === "closed" && (
-                <button
-                  onClick={() => runAction(() => onPublish(detail.id))}
-                  disabled={actionBusy}
-                  className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => runAction(() => onPublish(detail.id))} disabled={actionBusy} className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50">
                   Reopen
                 </button>
               )}

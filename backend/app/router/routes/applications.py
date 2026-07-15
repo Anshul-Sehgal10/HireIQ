@@ -1,12 +1,18 @@
 """
 Application routes.
 
-POST   /applications/                          → candidate applies to a job
-GET    /applications/mine                      → candidate's own applications (with job info)
-GET    /applications/mine/{application_id}     → single application (candidate)
-POST   /applications/{application_id}/withdraw → candidate withdraws
-GET    /applications/job/{job_id}              → employer sees applicants for a job
+This module contains all API endpoints related to job applications.
+
+Responsibilities:
+- Candidate application lifecycle (apply, view, withdraw)
+- Employer applicant listing
+- Match score calculation
+- Automatic scenario question generation
+
+The implementation intentionally keeps route handlers thin by delegating
+database operations to repository modules and business logic to services.
 """
+
 
 import uuid
 from typing import Annotated, List, Optional
@@ -22,7 +28,8 @@ from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting, JobStatus
 from app.db.models.resume_versions import ResumeVersion
-from app.repositories import application_repo, job_repo
+from app.repositories import application_repo, job_repo, scenario_repo
+from app.services.scenario_generation import generate_scenario_question
 from app.repositories.org_repo import get_org_for_user
 from app.schemas.application import (
     ApplicationCreate,
@@ -42,6 +49,19 @@ router = APIRouter(prefix="/applications", tags=["applications"])
 # ---------------------------------------------------------------------------
 
 async def _get_candidate_profile(db: AsyncSession, user_id: uuid.UUID) -> CandidateProfile:
+    """
+    Retrieve the candidate profile for the authenticated user.
+
+    Args:
+        db: Active database session.
+        user_id: Authenticated user's ID.
+
+    Returns:
+        CandidateProfile belonging to the user.
+
+    Raises:
+        HTTPException: If no candidate profile exists.
+    """
     result = await db.execute(
         select(CandidateProfile).where(CandidateProfile.user_id == user_id)
     )
@@ -71,10 +91,41 @@ def _build_with_job_response(
     )
 
 def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
+    """
+    Compute the semantic match score between a resume and a job description.
+
+    Returns None when embeddings are unavailable.
+    """
     return compute_match_score(
         resume_version.embedding, job.jd_embedding,
         resume_version.categories, job.categories,
     )
+
+async def _ensure_scenario_question(db: AsyncSession, job: JobPosting) -> None:
+    """
+    Lazily generates the job's scenario question the first time any
+    candidate applies, rather than requiring the employer to trigger it
+    manually. The question is shared across all candidates for a job — the
+    LangGraph pipeline only runs once per job, on whoever applies first.
+
+    Best-effort: a generation failure here should never block the
+    application itself. If the employer already triggered generation
+    another way (e.g. directly via the API), this is a no-op.
+    """
+    if not job.scenario_enabled:
+        return
+    existing = await scenario_repo.get_active_question(db, job.id)
+    if existing is not None:
+        return
+    try:
+        result = await generate_scenario_question(job)
+    except Exception as exc:
+        logger.error(f"Scenario question generation failed at apply-time for job {job.id}: {exc}")
+        return
+    if result is None:
+        return
+    question_text, time_limit_seconds = result
+    await scenario_repo.create_scenario_question(db, job.id, question_text, time_limit_seconds)
 
 # ---------------------------------------------------------------------------
 # Candidate — apply
@@ -82,10 +133,18 @@ def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
 
 @router.post("/", response_model=ApplicationResponse, status_code=status.HTTP_201_CREATED)
 async def apply(
+
     body: ApplicationCreate,
     user: CandidateUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    """
+    Submit a job application for the authenticated candidate.
+
+    The workflow validates the job, resolves the resume version,
+    calculates the match score, applies override rules when necessary,
+    and creates (or restores) the application.
+    """
     job = await job_repo.get_job(db, body.job_id)
     if not job:
         raise HTTPException(404, "Job not found")
@@ -146,6 +205,7 @@ async def apply(
         existing.is_override = is_low_match and body.override
         await db.commit()
         await db.refresh(existing)
+        await _ensure_scenario_question(db, job)
         return existing
 
     application = await application_repo.create_application(
@@ -157,6 +217,7 @@ async def apply(
         is_override=is_low_match and body.override,
         status=resolved_status,
     )
+    await _ensure_scenario_question(db, job)
     return application
 
 
