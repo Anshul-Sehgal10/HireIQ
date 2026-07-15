@@ -30,7 +30,6 @@ if TYPE_CHECKING:
     from .application import Application
     from .billing import TokenUsageLog
     from .pipeline import PipelineChannel
-    from .scenario import ScenarioQuestion
     from .organization import Organization
 
 
@@ -143,9 +142,6 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
     # Relationships
     organization: Mapped["Organization"] = relationship(back_populates="job_postings")
     applications: Mapped[List["Application"]] = relationship(
-        back_populates="job_posting", lazy="select"
-    )
-    scenario_questions: Mapped[List["ScenarioQuestion"]] = relationship(
         back_populates="job_posting", lazy="select"
     )
     pipeline_channel: Mapped[Optional["PipelineChannel"]] = relationship(

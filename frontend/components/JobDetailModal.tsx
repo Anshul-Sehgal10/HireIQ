@@ -1,6 +1,7 @@
 // frontend/components/JobDetailModal.tsx
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -67,6 +68,8 @@ export default function JobDetailModal({
   const [overridesRemaining, setOverridesRemaining] = useState<number | null>(
     null,
   );
+  const router = useRouter();
+  const [showScenarioConfirm, setShowScenarioConfirm] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -130,6 +133,9 @@ export default function JobDetailModal({
         job_id: jobId,
         status: data.status ?? "pending",
       });
+      if (data.status === "scenario_pending") {
+        router.push(`/candidate/scenario/${data.id}`);
+      }
     } catch (e: any) {
       setApplyError(e.message);
     } finally {
@@ -270,9 +276,39 @@ export default function JobDetailModal({
                   <p className="text-sm text-red-500">{applyError}</p>
                 )}
 
-                {relevance && (
+                {relevance && detail.scenario_enabled && showScenarioConfirm && (
+                  <div className="rounded-lg p-4 border border-teal-200 bg-teal-50 space-y-3">
+                    <p className="text-sm text-teal-800">
+                      This job requires a scenario-based test. Once you confirm,
+                      you'll be taken straight to it and the timer starts
+                      immediately — make sure you're ready before continuing.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => submitApply(!relevance.meets_threshold)}
+                        disabled={applying}
+                        className="flex-1 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
+                      >
+                        {applying ? "Submitting…" : "Yes, start the test"}
+                      </button>
+                      <button
+                        onClick={() => setShowScenarioConfirm(false)}
+                        disabled={applying}
+                        className="flex-1 bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg transition-colors"
+                      >
+                        Not yet
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {relevance && (!detail.scenario_enabled || !showScenarioConfirm) && (
                   <button
-                    onClick={() => submitApply(!relevance.meets_threshold)}
+                    onClick={() =>
+                      detail.scenario_enabled
+                        ? setShowScenarioConfirm(true)
+                        : submitApply(!relevance.meets_threshold)
+                    }
                     disabled={applying}
                     className={`w-full text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
                       relevance.meets_threshold

@@ -42,7 +42,7 @@ def set_refresh_cookie(response: Response, refresh_token: str):
         secure=not settings.DEBUG,
         samesite="lax",
         path="/",
-        max_age=60 * 60 * 24 * 30,  # 30 days
+        max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS, # 7 days
     )
 
 # Add this helper alongside set_refresh_cookie:

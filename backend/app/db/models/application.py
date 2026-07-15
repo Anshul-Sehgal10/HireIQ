@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from .candidate_profiles import CandidateProfile, ResumeVersion
     from .job import JobPosting
     from .pipeline import ChannelMember
-    from .scenario import ScenarioResponse
+    from .scenario import ScenarioResponse, ScenarioQuestion
 
 
 class ApplicationStatus(str, enum.Enum):
@@ -109,6 +109,9 @@ class Application(UUIDMixin, Base):
     )
     channel_member: Mapped[Optional["ChannelMember"]] = relationship(
         back_populates="application", uselist=False, lazy="select"
+    )
+    scenario_question: Mapped[Optional["ScenarioQuestion"]] = relationship(
+    back_populates="application", uselist=False, lazy="select"
     )
 
     __table_args__ = (

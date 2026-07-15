@@ -7,7 +7,6 @@ Responsibilities:
 - Candidate application lifecycle (apply, view, withdraw)
 - Employer applicant listing
 - Match score calculation
-- Automatic scenario question generation
 
 The implementation intentionally keeps route handlers thin by delegating
 database operations to repository modules and business logic to services.
@@ -28,8 +27,7 @@ from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting, JobStatus
 from app.db.models.resume_versions import ResumeVersion
-from app.repositories import application_repo, job_repo, scenario_repo
-from app.services.scenario_generation import generate_scenario_question
+from app.repositories import application_repo, job_repo
 from app.repositories.org_repo import get_org_for_user
 from app.schemas.application import (
     ApplicationCreate,
@@ -101,31 +99,6 @@ def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
         resume_version.categories, job.categories,
     )
 
-async def _ensure_scenario_question(db: AsyncSession, job: JobPosting) -> None:
-    """
-    Lazily generates the job's scenario question the first time any
-    candidate applies, rather than requiring the employer to trigger it
-    manually. The question is shared across all candidates for a job — the
-    LangGraph pipeline only runs once per job, on whoever applies first.
-
-    Best-effort: a generation failure here should never block the
-    application itself. If the employer already triggered generation
-    another way (e.g. directly via the API), this is a no-op.
-    """
-    if not job.scenario_enabled:
-        return
-    existing = await scenario_repo.get_active_question(db, job.id)
-    if existing is not None:
-        return
-    try:
-        result = await generate_scenario_question(job)
-    except Exception as exc:
-        logger.error(f"Scenario question generation failed at apply-time for job {job.id}: {exc}")
-        return
-    if result is None:
-        return
-    question_text, time_limit_seconds = result
-    await scenario_repo.create_scenario_question(db, job.id, question_text, time_limit_seconds)
 
 # ---------------------------------------------------------------------------
 # Candidate — apply
@@ -191,12 +164,15 @@ async def apply(
             )
         await increment_override_usage(db, profile)
 
-    if match_score is None:
+    if job.scenario_enabled:
+        # Resume stage passed (or overridden) — gate on the scenario test next,
+        # regardless of whether match_score was computable. The candidate still
+        # needs to clear the scenario before moving further in the pipeline.
+        resolved_status = ApplicationStatus.SCENARIO_PENDING
+    elif match_score is None:
         resolved_status = ApplicationStatus.PENDING
-    elif match_score >= job.match_threshold:
-        resolved_status = ApplicationStatus.RESUME_PASSED
     else:
-        resolved_status = ApplicationStatus.RESUME_PASSED  # override path — let through
+        resolved_status = ApplicationStatus.RESUME_PASSED  # threshold met or override used
 
     if existing and existing.status == ApplicationStatus.WITHDRAWN:
         existing.status = resolved_status.value  # type: ignore
@@ -205,7 +181,6 @@ async def apply(
         existing.is_override = is_low_match and body.override
         await db.commit()
         await db.refresh(existing)
-        await _ensure_scenario_question(db, job)
         return existing
 
     application = await application_repo.create_application(
@@ -217,7 +192,6 @@ async def apply(
         is_override=is_low_match and body.override,
         status=resolved_status,
     )
-    await _ensure_scenario_question(db, job)
     return application
 
 

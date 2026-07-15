@@ -207,7 +207,7 @@ _compiled_graph = _graph.compile()
 # Public entry point
 # ---------------------------------------------------------------------------
 
-def _build_job_context(job: JobPosting) -> str:
+def build_job_context(job: JobPosting) -> str:
     """
     Prefers the structured JD extraction (parsed_data) when available — it's
     already cleaned of boilerplate. Falls back to the raw description for
@@ -237,7 +237,7 @@ async def generate_scenario_question(job: JobPosting) -> Optional[tuple[str, int
     None if the pipeline failed — non-fatal to caller.
     """
     initial_state: ScenarioGenState = {
-        "job_context": _build_job_context(job),
+        "job_context": build_job_context(job),
         "job_level": job.job_level.value if job.job_level else None,
         "draft_question": None,
         "draft_time_limit": 300,
