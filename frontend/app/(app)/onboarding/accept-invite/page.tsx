@@ -47,7 +47,7 @@ export default function AcceptInvitePage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to accept invite");
       setState("success");
-      setTimeout(() => router.push("/dashboard/employer/org"), 1500);
+      setTimeout(() => router.push("/employer/organization"), 1500);
     } catch (e: any) {
       setErrorMsg(e.message);
       setState("error");
@@ -58,7 +58,7 @@ export default function AcceptInvitePage() {
     try {
       await apiFetch(`/orgs/invites/${token}/decline`, { method: "POST" });
     } finally {
-      router.push("/dashboard/employer");
+      router.push("/employer/dashboard");
     }
   };
 
@@ -127,7 +127,7 @@ export default function AcceptInvitePage() {
             <h2 className="text-white font-bold text-lg mb-2">Something went wrong</h2>
             <p className="text-red-400 text-sm mb-6">{errorMsg}</p>
             <Link
-              href="/dashboard/employer"
+              href="/employer/dashboard"
               className="inline-block text-sm text-slate-400 hover:text-white transition-colors"
             >
               ← Back to dashboard

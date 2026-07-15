@@ -82,10 +82,11 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
       TURBOPACK: 0
-    command: npx next dev
+    command: npm run dev
     volumes:
       - ./frontend:/app       # live reload
       - /app/node_modules     # keep container's node_modules, don't overwrite with host
+      - /app/.next            # isolate container's .next build folder from the host
     ports:
       - "3000:3000"
 

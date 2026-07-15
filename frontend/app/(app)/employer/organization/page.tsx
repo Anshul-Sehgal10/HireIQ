@@ -81,7 +81,7 @@ function OrgContent() {
     (async () => {
       const res = await apiFetch("/orgs/mine");
       if (res.status === 404) {
-        router.replace("/dashboard/employer/org/setup");
+        router.replace("/employer/organization/setup");
         return;
       }
       const data: Org = await res.json();
@@ -113,8 +113,9 @@ function OrgContent() {
       if (!res.ok) throw new Error(data.detail ?? "Failed to send invite");
       setInvites((prev) => [data, ...prev]);
       setInviteEmail("");
-    } catch (e: any) {
-      setInviteError(e.message);
+    } catch (e: unknown) {
+      const error = e instanceof Error ? e : new Error(String(e));
+      setInviteError(error.message);
     } finally {
       setInviteLoading(false);
     }
@@ -267,7 +268,7 @@ function OrgContent() {
                 />
                 <select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as any)}
+                  onChange={(e) => setInviteRole(e.target.value as "recruiter" | "viewer")}
                   className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                 >
                   <option value="recruiter">Recruiter</option>

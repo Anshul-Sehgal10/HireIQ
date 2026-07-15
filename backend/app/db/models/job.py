@@ -132,6 +132,9 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
     match_threshold: Mapped[float] = mapped_column(
         Float, default=0.65, server_default="0.65"
     )
+    scenario_score_threshold: Mapped[float] = mapped_column(
+        Float, default=0.5, server_default="0.5"
+    )
 
     published_at: Mapped[Optional[object]] = mapped_column(DateTime(timezone=True), nullable=True)
     expires_at: Mapped[Optional[object]] = mapped_column(DateTime(timezone=True), nullable=True)

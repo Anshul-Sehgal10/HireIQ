@@ -287,9 +287,10 @@ async def list_for_job(
     # Returns list of Row(Application, CandidateProfile, User)
     rows = await application_repo.list_applications_by_job(db, job_id)
 
-    # if status is withdrawn, don't show the application to the employer
+    # if status is withdrawn or scenario pending, don't show the application to the employer
     filtered_rows = [
-        (app, profile, user) for app, profile, user in rows if app.status != ApplicationStatus.WITHDRAWN
+        (app, profile, user) for app, profile, user in rows
+        if app.status not in (ApplicationStatus.WITHDRAWN, ApplicationStatus.SCENARIO_PENDING)
     ]
 
     return [

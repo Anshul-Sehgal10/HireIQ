@@ -28,8 +28,10 @@ class ScenarioResultResponse(BaseModel):
     paste_detected: bool
     tab_switches: int
     submitted_at: datetime
-
-    model_config = {"from_attributes": True}
+    meets_threshold: bool
+    scenario_score_threshold: float
+    requires_override: bool
+    overrides_remaining: int
 
 
 class ScenarioPreviewResponse(BaseModel):

@@ -20,9 +20,9 @@ import { NextRequest, NextResponse } from "next/server";
  */
 
 const ROLE_ROUTES: Record<string, string[]> = {
-  "/dashboard/admin":     ["admin"],
-  "/dashboard/employer":  ["employer", "admin"],
-  "/dashboard/candidate": ["candidate", "admin"],
+  "/admin":               ["admin"],
+  "/employer":            ["employer", "admin"],
+  "/candidate":           ["candidate", "admin"],
   "/onboarding":          ["employer", "candidate", "admin"],
   "/profile":             ["admin", "employer", "candidate"],
 
@@ -75,5 +75,5 @@ export function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/onboarding/:path*", "/profile"],
+  matcher: ["/admin/:path*", "/employer/:path*", "/candidate/:path*", "/onboarding/:path*", "/profile"],
 };

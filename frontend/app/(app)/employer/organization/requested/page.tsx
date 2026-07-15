@@ -19,13 +19,13 @@ export default function RequestedPage() {
         </p>
         <div className="flex flex-col gap-3">
           <Link
-            href="/dashboard/employer"
+            href="/employer/dashboard"
             className="bg-slate-800 hover:bg-slate-700 text-slate-200 font-medium py-3 rounded-lg text-sm transition-colors"
           >
             Back to dashboard
           </Link>
           <Link
-            href="/dashboard/employer/org/setup"
+            href="/employer/organization/setup"
             className="text-slate-500 hover:text-slate-300 text-sm transition-colors py-2"
           >
             Try a different organisation

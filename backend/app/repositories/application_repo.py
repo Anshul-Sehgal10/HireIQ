@@ -118,3 +118,17 @@ async def withdraw_application(
     db: AsyncSession, application: Application
 ) -> Application:
     return await update_application_status(db, application, ApplicationStatus.WITHDRAWN)
+
+
+async def mark_scenario_finalized(
+    db: AsyncSession,
+    application: Application,
+    status: ApplicationStatus,
+    is_override: bool,
+) -> Application:
+    application.status = status
+    if is_override:
+        application.is_override = True
+    await db.commit()
+    await db.refresh(application)
+    return application

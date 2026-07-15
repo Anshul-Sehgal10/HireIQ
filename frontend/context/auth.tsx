@@ -7,8 +7,8 @@
       const { user, logout } = useAuth();
       return (
         <nav>
-          {user?.role === "employer" && <Link href="/dashboard/employer/jobs">Jobs</Link>}
-          {user?.role === "candidate" && <Link href="/dashboard/candidate">Feed</Link>}
+//           {user?.role === "employer" && <Link href="/employer/jobs">Jobs</Link>}
+//           {user?.role === "candidate" && <Link href="/candidate/dashboard">Feed</Link>}
           <button onClick={logout}>Sign out</button>
         </nav>
       );

@@ -23,6 +23,10 @@ interface ScenarioResult {
   paste_detected: boolean;
   tab_switches: number;
   submitted_at: string;
+  meets_threshold: boolean;
+  scenario_score_threshold: number;
+  requires_override: boolean;
+  overrides_remaining: number;
 }
 
 type Stage = "loading" | "in_progress" | "submitting" | "done" | "error";
@@ -49,6 +53,7 @@ function ScenarioContent() {
   const pasteDetectedRef = useRef(false);
   const tabSwitchesRef = useRef(0);
   const submittingRef = useRef(false); // guards against double-submit (manual + auto)
+  const [overriding, setOverriding] = useState(false);
 
   // --- Start the attempt on mount ---
   useEffect(() => {
@@ -113,6 +118,22 @@ function ScenarioContent() {
     }
   };
 
+    const confirmOverride = async () => {
+    setOverriding(true);
+    try {
+      const res = await apiFetch(`/applications/${applicationId}/scenario/override`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to apply override");
+      setResult(data);
+    } catch (e: any) {
+      setErrorMsg(e.message);
+    } finally {
+      setOverriding(false);
+    }
+  };
+
   const minutes = Math.floor(timeLeft / 60);
   const seconds = timeLeft % 60;
   const urgent = timeLeft <= 30;
@@ -151,19 +172,55 @@ function ScenarioContent() {
             Your answer has been recorded and factored into your application.
           </p>
 
-          {result.score != null ? (
-            <div className="bg-slate-800 border border-slate-700 rounded-xl p-5 mb-4">
+          {result.score != null && (
+            <div
+              className={`rounded-xl p-5 mb-4 border ${
+                result.meets_threshold
+                  ? "bg-slate-800 border-slate-700"
+                  : "bg-amber-500/10 border-amber-500/25"
+              }`}
+            >
               <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Score</p>
-              <p className="text-3xl font-bold text-emerald-400">
+              <p
+                className={`text-3xl font-bold ${
+                  result.meets_threshold ? "text-emerald-400" : "text-amber-400"
+                }`}
+              >
                 {Math.round(result.score * 100)}%
               </p>
             </div>
-          ) : (
+          )}
+
+          {result.score == null && (
             <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-5 mb-4">
               <p className="text-sm text-amber-400">
                 Your response was saved, but automatic scoring didn't complete. This won't
                 block your application — it'll be reviewed separately.
               </p>
+            </div>
+          )}
+
+          {result.requires_override && (
+            <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-5 mb-6 space-y-3">
+              <p className="text-sm text-amber-300">
+                Your score didn't meet this role's bar. Your application hasn't been submitted
+                yet — you can use one of your monthly overrides to submit it anyway.
+              </p>
+              <p className="text-xs text-amber-400/80">
+                {result.overrides_remaining} override{result.overrides_remaining !== 1 ? "s" : ""}{" "}
+                remaining this month.
+              </p>
+              <button
+                onClick={confirmOverride}
+                disabled={overriding || result.overrides_remaining === 0}
+                className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+              >
+                {overriding
+                  ? "Submitting…"
+                  : result.overrides_remaining === 0
+                    ? "No overrides remaining"
+                    : "Use an override and submit anyway"}
+              </button>
             </div>
           )}
 

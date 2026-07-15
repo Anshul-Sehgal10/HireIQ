@@ -14,6 +14,7 @@ class JobCreate(BaseModel):
     hiring_count: int = 1
     scenario_enabled: bool = False
     match_threshold: float = Field(default=0.65, ge=0.0, le=1.0)
+    scenario_score_threshold: float = Field(default=0.5, ge=0.0, le=1.0)
 
 class JobUpdate(BaseModel):
     title: Optional[str] = None
@@ -26,6 +27,7 @@ class JobUpdate(BaseModel):
     hiring_count: Optional[int] = None
     scenario_enabled: Optional[bool] = None
     match_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    scenario_score_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
 
 class JobResponse(BaseModel):
     id: UUID
@@ -42,6 +44,7 @@ class JobResponse(BaseModel):
     scenario_enabled: bool
     match_threshold: float
     categories: Optional[list[str]] = None
+    scenario_score_threshold: float
 
     model_config = {"from_attributes": True}
 

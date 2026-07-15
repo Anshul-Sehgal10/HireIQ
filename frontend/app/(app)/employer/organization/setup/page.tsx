@@ -28,9 +28,9 @@ export default function OrgSetupPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to create organisation");
-      router.push("/dashboard/employer/org");
-    } catch (e: any) {
-      setError(e.message);
+      router.push("/employer/organization");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -43,9 +43,9 @@ export default function OrgSetupPage() {
       const res = await apiFetch(`/orgs/${orgId.trim()}/requests/`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to send join request");
-      router.push("/dashboard/employer/org/requested");
-    } catch (e: any) {
-      setError(e.message);
+      router.push("/employer/organization/requested");
+    } catch (e: unknown) { 
+      setError(e instanceof Error ? e.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -151,7 +151,7 @@ export default function OrgSetupPage() {
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-white placeholder-slate-500 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500"
               />
               <p className="mt-1.5 text-xs text-slate-500">
-                Ask your organisation's admin for their org ID.
+                Ask your organisation&apos;s or their org ID.
               </p>
             </div>
             <button

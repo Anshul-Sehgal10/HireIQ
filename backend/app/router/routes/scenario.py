@@ -24,6 +24,7 @@ from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.repositories import scenario_repo, application_repo, job_repo
 from app.repositories.org_repo import get_org_for_user
+from app.repositories.resume_repo import increment_override_usage
 from sqlalchemy import select
 from app.schemas.scenario import (
     ScenarioPreviewResponse,
@@ -106,6 +107,14 @@ def _to_question_response(question) -> ScenarioQuestionResponse:
         time_remaining_seconds=remaining,
     )
 
+async def _get_candidate_profile(db: AsyncSession, user_id) -> CandidateProfile:
+    result = await db.execute(
+        select(CandidateProfile).where(CandidateProfile.user_id == user_id)
+    )
+    profile = result.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(404, "Candidate profile not found")
+    return profile
 
 # ---------------------------------------------------------------------------
 # Candidate — start attempt
@@ -123,7 +132,10 @@ async def start_scenario(
         raise HTTPException(400, "You've already submitted this scenario question")
     if application.status != ApplicationStatus.SCENARIO_PENDING:
         raise HTTPException(400, "This application does not have a pending scenario test")
-
+    
+    if await scenario_repo.get_response_for_application(db, application_id):
+        raise HTTPException(400, "You've already submitted a response for this scenario")
+    
     # Idempotent — page refresh / re-navigation should resume the same
     # question and clock rather than generating a new one.
     existing = await scenario_repo.get_question_for_application(db, application_id)
@@ -178,8 +190,6 @@ async def submit_scenario(
 ):
     application = await _get_owned_application(db, application_id, user)
 
-    if application.status == ApplicationStatus.SCENARIO_SUBMITTED:
-        raise HTTPException(400, "You've already submitted this scenario question")
     if application.status != ApplicationStatus.SCENARIO_PENDING:
         raise HTTPException(400, "This application does not have a pending scenario test")
 
@@ -187,31 +197,106 @@ async def submit_scenario(
     if not question:
         raise HTTPException(400, "You must start the scenario before submitting")
 
+    if await scenario_repo.get_response_for_application(db, application_id):
+        raise HTTPException(400, "You've already submitted a response for this scenario")
+
     job = await job_repo.get_job(db, application.job_id)
     if not job:
         raise HTTPException(404, "Job not found")
 
-    # Server-side clock is the source of truth — the client-side timer is UX only.
     time_taken_seconds = int(
-        (datetime.now(timezone.utc) - question.started_at).total_seconds() # type: ignore
+        (datetime.now(timezone.utc) - question.started_at).total_seconds() #type: ignore
     )
-
     evaluation = await evaluate_scenario_response(job, question.question_text, body.response_text)
+    score = evaluation.score if evaluation else None
 
     scenario_response = await scenario_repo.create_scenario_response(
         db,
         application_id=application_id,
         question_id=question.id,
         response_text=body.response_text,
-        score=evaluation.score if evaluation else None,
+        score=score,
         ai_summary=evaluation.summary if evaluation else None,
         paste_detected=body.paste_detected,
         tab_switches=body.tab_switches,
         time_taken_seconds=time_taken_seconds,
     )
 
-    await application_repo.update_application_status(
-        db, application, ApplicationStatus.SCENARIO_SUBMITTED
+    # An ungraded response (evaluation call failed) is let through rather than
+    # blocked — an infra hiccup on our end shouldn't cost the candidate their
+    # attempt or an override. It's surfaced to the employer as ungraded instead.
+    meets_threshold = score is None or score >= job.scenario_score_threshold
+
+    if meets_threshold:
+        application = await application_repo.mark_scenario_finalized(
+            db, application, ApplicationStatus.SCENARIO_SUBMITTED, is_override=False
+        )
+
+    profile = await _get_candidate_profile(db, user.id)
+    overrides_remaining = max(0, profile.override_apps_limit - profile.override_apps_used)
+
+    return ScenarioResultResponse(
+        id=scenario_response.id,
+        application_id=scenario_response.application_id,
+        score=scenario_response.score,
+        ai_summary=scenario_response.ai_summary,
+        time_taken_seconds=scenario_response.time_taken_seconds,
+        paste_detected=scenario_response.paste_detected,
+        tab_switches=scenario_response.tab_switches,
+        submitted_at=scenario_response.submitted_at, #type: ignore
+        meets_threshold=meets_threshold,
+        scenario_score_threshold=job.scenario_score_threshold,
+        requires_override=not meets_threshold,
+        overrides_remaining=overrides_remaining,
+    )
+    
+
+@candidate_router.post("/{application_id}/scenario/override", response_model=ScenarioResultResponse)
+async def override_scenario(
+    application_id: UUID,
+    user: CandidateUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Candidate has already seen their below-threshold scenario score and
+    chooses to proceed anyway, spending one override for the month — same
+    quota pool used for below-threshold resume matches at apply time.
+    """
+    profile = await _get_candidate_profile(db, user.id)
+    application = await application_repo.get_application_by_id(db, application_id)
+    if not application or application.candidate_id != profile.id:
+        raise HTTPException(404, "Application not found")
+
+    if application.status != ApplicationStatus.SCENARIO_PENDING:
+        raise HTTPException(400, "This application does not have a pending scenario test")
+
+    scenario_response = await scenario_repo.get_response_for_application(db, application_id)
+    if not scenario_response:
+        raise HTTPException(400, "You must submit your scenario answer before overriding")
+
+    if profile.override_apps_used >= profile.override_apps_limit:
+        raise HTTPException(400, "You've used all your override applications for this month.")
+
+    job = await job_repo.get_job(db, application.job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+
+    await increment_override_usage(db, profile)
+    application = await application_repo.mark_scenario_finalized(
+        db, application, ApplicationStatus.SCENARIO_SUBMITTED, is_override=True
     )
 
-    return scenario_response
+    return ScenarioResultResponse(
+        id=scenario_response.id,
+        application_id=scenario_response.application_id,
+        score=scenario_response.score,
+        ai_summary=scenario_response.ai_summary,
+        time_taken_seconds=scenario_response.time_taken_seconds,
+        paste_detected=scenario_response.paste_detected,
+        tab_switches=scenario_response.tab_switches,
+        submitted_at=scenario_response.submitted_at, #type: ignore
+        meets_threshold=True,
+        scenario_score_threshold=job.scenario_score_threshold,
+        requires_override=False,
+        overrides_remaining=max(0, profile.override_apps_limit - profile.override_apps_used),
+    )

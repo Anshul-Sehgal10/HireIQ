@@ -51,7 +51,7 @@ export default async function EmployerDashboard() {
   const org = await fetchOrg(token);
 
   // No org → send to setup flow
-  if (!org) redirect("/dashboard/employer/org/setup");
+  if (!org) redirect("/employer/organization/setup");
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100">
