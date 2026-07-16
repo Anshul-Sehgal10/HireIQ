@@ -73,6 +73,10 @@ class CandidateProfile(UUIDMixin, TimestampMixin, Base):
 
     categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
 
+    override_apps_reset_at: Mapped[Optional[object]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # Relationships
     user: Mapped["User"] = relationship(back_populates="candidate_profile")
     resume_versions: Mapped[List["ResumeVersion"]] = relationship(

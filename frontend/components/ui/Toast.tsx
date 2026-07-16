@@ -71,7 +71,8 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       {children}
       {typeof document !== "undefined" &&
         createPortal(
-          <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2">
+          // Fix hydration error here
+          <div suppressHydrationWarning={true} className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2">
             {toasts.map((t) => {
               const Icon = ICONS[t.variant];
               return (

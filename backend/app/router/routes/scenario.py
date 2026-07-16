@@ -34,6 +34,7 @@ from app.schemas.scenario import (
 )
 from app.services.scenario_generation import generate_scenario_question
 from app.services.scenario_evaluation import evaluate_scenario_response
+from app.services.override_quota import ensure_override_quota_current, is_unlimited
 
 employer_router = APIRouter(prefix="/jobs", tags=["scenario"])
 candidate_router = APIRouter(prefix="/applications", tags=["scenario"])
@@ -233,6 +234,7 @@ async def submit_scenario(
         )
 
     profile = await _get_candidate_profile(db, user.id)
+    profile = await ensure_override_quota_current(db, profile)
     overrides_remaining = max(0, profile.override_apps_limit - profile.override_apps_used)
 
     return ScenarioResultResponse(
@@ -248,6 +250,7 @@ async def submit_scenario(
         scenario_score_threshold=job.scenario_score_threshold,
         requires_override=not meets_threshold,
         overrides_remaining=overrides_remaining,
+        overrides_unlimited=is_unlimited(profile.override_apps_limit),
     )
     
 
@@ -263,6 +266,7 @@ async def override_scenario(
     quota pool used for below-threshold resume matches at apply time.
     """
     profile = await _get_candidate_profile(db, user.id)
+    profile = await ensure_override_quota_current(db, profile)
     application = await application_repo.get_application_by_id(db, application_id)
     if not application or application.candidate_id != profile.id:
         raise HTTPException(404, "Application not found")
@@ -299,4 +303,5 @@ async def override_scenario(
         scenario_score_threshold=job.scenario_score_threshold,
         requires_override=False,
         overrides_remaining=max(0, profile.override_apps_limit - profile.override_apps_used),
+        overrides_unlimited=is_unlimited(profile.override_apps_limit),
     )

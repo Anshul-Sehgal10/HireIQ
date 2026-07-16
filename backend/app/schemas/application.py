@@ -32,6 +32,10 @@ class ApplicationWithJobResponse(ApplicationResponse):
     job_level: Optional[JobLevel]
     job_status: JobStatus
     org_name: str
+    scenario_enabled: bool
+    scenario_score: Optional[float] = None
+    scenario_ai_summary: Optional[str] = None
+    scenario_meets_threshold: Optional[bool] = None
 
 
 class EmployerApplicationResponse(BaseModel):

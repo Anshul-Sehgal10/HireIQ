@@ -49,7 +49,8 @@ async def list_applications_by_candidate(
     result = await db.execute(
         select(Application)
         .options(
-            joinedload(Application.job_posting).joinedload(JobPosting.organization)
+            joinedload(Application.job_posting).joinedload(JobPosting.organization),
+            joinedload(Application.scenario_response),
         )
         .where(Application.candidate_id == candidate_id)
         .order_by(Application.applied_at.desc())

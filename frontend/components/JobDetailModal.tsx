@@ -1,7 +1,5 @@
-// frontend/components/JobDetailModal.tsx
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
@@ -16,6 +14,7 @@ interface JobDetail {
   salary_max: number | null;
   categories?: string[] | null;
   scenario_enabled: boolean;
+  scenario_score_threshold: number;
   org_name: string;
   org_domain: string | null;
   org_verification_status: string;
@@ -28,6 +27,18 @@ interface ResumeVersion {
   is_current: boolean;
 }
 
+interface ApplicationSummary {
+  id: string;
+  job_id: string;
+  status: string;
+  match_score: number | null;
+  is_override: boolean;
+  scenario_enabled: boolean;
+  scenario_score: number | null;
+  scenario_ai_summary: string | null;
+  scenario_meets_threshold: boolean | null;
+}
+
 interface RelevanceResult {
   resume_version_id: string;
   match_score: number | null;
@@ -38,19 +49,15 @@ interface RelevanceResult {
 interface Props {
   jobId: string;
   resumeVersions: ResumeVersion[];
-  alreadyApplied: boolean;
+  application?: ApplicationSummary;
   onClose: () => void;
-  onApplied: (application: {
-    id: string;
-    job_id: string;
-    status: string;
-  }) => void;
+  onApplied: (application: { id: string; job_id: string; status: string }) => void;
 }
 
 export default function JobDetailModal({
   jobId,
   resumeVersions,
-  alreadyApplied,
+  application,
   onClose,
   onApplied,
 }: Props) {
@@ -65,10 +72,7 @@ export default function JobDetailModal({
   const [checking, setChecking] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
-  const [overridesRemaining, setOverridesRemaining] = useState<number | null>(
-    null,
-  );
-  const router = useRouter();
+  const [overridesRemaining, setOverridesRemaining] = useState<number | null>(null);
   const [showScenarioConfirm, setShowScenarioConfirm] = useState(false);
 
   useEffect(() => {
@@ -92,9 +96,7 @@ export default function JobDetailModal({
     setRelevance(null);
     setApplyError(null);
     try {
-      const res = await apiFetch(
-        `/jobs/${jobId}/relevance?resume_version_id=${selectedResumeId}`,
-      );
+      const res = await apiFetch(`/jobs/${jobId}/relevance?resume_version_id=${selectedResumeId}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to check relevance");
       setRelevance(data);
@@ -111,11 +113,7 @@ export default function JobDetailModal({
     try {
       const res = await apiFetch("/applications/", {
         method: "POST",
-        body: JSON.stringify({
-          job_id: jobId,
-          resume_version_id: selectedResumeId,
-          override,
-        }),
+        body: JSON.stringify({ job_id: jobId, resume_version_id: selectedResumeId, override }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -124,18 +122,9 @@ export default function JobDetailModal({
           setApplyError(data.detail.message);
           return;
         }
-        throw new Error(
-          data.detail?.message ?? data.detail ?? "Failed to apply",
-        );
+        throw new Error(data.detail?.message ?? data.detail ?? "Failed to apply");
       }
-      onApplied({
-        id: data.id,
-        job_id: jobId,
-        status: data.status ?? "pending",
-      });
-      if (data.status === "scenario_pending") {
-        router.push(`/candidate/scenario/${data.id}`);
-      }
+      onApplied({ id: data.id, job_id: jobId, status: data.status ?? "pending" });
     } catch (e: any) {
       setApplyError(e.message);
     } finally {
@@ -146,17 +135,13 @@ export default function JobDetailModal({
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
-        {loading && (
-          <p className="text-sm text-gray-400 animate-pulse">Loading…</p>
-        )}
+        {loading && <p className="text-sm text-gray-400 animate-pulse">Loading…</p>}
         {loadError && <p className="text-sm text-red-500">{loadError}</p>}
 
         {detail && (
           <>
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-gray-900 mb-1">
-                {detail.title}
-              </h2>
+              <h2 className="text-lg font-bold text-gray-900 mb-1">{detail.title}</h2>
               <div className="flex items-center gap-2 text-sm text-gray-500">
                 <span>{detail.org_name}</span>
                 <span
@@ -170,9 +155,7 @@ export default function JobDetailModal({
                 </span>
               </div>
               <p className="text-sm text-gray-500 mt-1">
-                {[detail.location, detail.work_mode, detail.job_level]
-                  .filter(Boolean)
-                  .join(" · ")}
+                {[detail.location, detail.work_mode, detail.job_level].filter(Boolean).join(" · ")}
               </p>
               {(detail.salary_min || detail.salary_max) && (
                 <p className="text-sm text-gray-500 mt-1">
@@ -186,10 +169,7 @@ export default function JobDetailModal({
               {detail.categories && detail.categories.length > 0 && (
                 <div className="flex gap-1.5 mt-2 flex-wrap">
                   {detail.categories.map((c) => (
-                    <span
-                      key={c}
-                      className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full capitalize"
-                    >
+                    <span key={c} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full capitalize">
                       {c.replace(/_/g, " ")}
                     </span>
                   ))}
@@ -198,9 +178,7 @@ export default function JobDetailModal({
             </div>
 
             <div className="border-t border-gray-100 pt-4 mb-4">
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                {detail.description}
-              </p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.description}</p>
             </div>
 
             {detail.scenario_enabled && (
@@ -209,17 +187,64 @@ export default function JobDetailModal({
                   Includes a scenario question
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  After you apply, you'll be asked a role-specific scenario
-                  question with a time limit. It's generated when you apply, so
-                  there's nothing to preview beforehand.
+                  After you apply, you'll be asked a role-specific scenario question with a time
+                  limit. You'll need to score at least{" "}
+                  {Math.round(detail.scenario_score_threshold * 100)}% to pass — if you don't,
+                  you can use a monthly override to submit anyway. It's generated when you apply,
+                  so there's nothing to preview beforehand.
                 </p>
               </div>
             )}
 
-            {alreadyApplied ? (
-              <p className="text-sm text-emerald-600 font-medium">
-                You've already applied to this job.
-              </p>
+            {application ? (
+              <div className="border-t border-gray-100 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium text-emerald-700">You've applied to this job.</p>
+                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 capitalize">
+                    {application.status.replace(/_/g, " ")}
+                  </span>
+                </div>
+
+                {application.match_score != null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Resume match</span>
+                    <span className="font-medium text-gray-900">
+                      {Math.round(application.match_score * 100)}%
+                    </span>
+                  </div>
+                )}
+
+                {detail.scenario_enabled && application.scenario_score != null && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500">Scenario score</span>
+                    <span
+                      className={`font-medium ${
+                        application.scenario_meets_threshold === false ? "text-amber-600" : "text-gray-900"
+                      }`}
+                    >
+                      {Math.round(application.scenario_score * 100)}%
+                      {application.scenario_meets_threshold === false && " (below bar)"}
+                    </span>
+                  </div>
+                )}
+
+                {application.is_override && (
+                  <p className="text-xs text-amber-600">You used a monthly override on this application.</p>
+                )}
+
+                {application.status === "scenario_pending" && (
+                  <a
+                    href={
+                      application.scenario_score != null
+                        ? "/candidate/dashboard"
+                        : `/candidate/scenario/${application.id}`
+                    }
+                    className="block text-center text-xs bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 rounded-lg transition-colors"
+                  >
+                    {application.scenario_score != null ? "Manage on dashboard" : "Continue to scenario test"}
+                  </a>
+                )}
+              </div>
             ) : (
               <div className="border-t border-gray-100 pt-4 space-y-4">
                 <div>
@@ -257,9 +282,7 @@ export default function JobDetailModal({
                   <div
                     className={`rounded-lg p-4 border ${relevance.meets_threshold ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}
                   >
-                    <p
-                      className={`text-sm font-medium ${relevance.meets_threshold ? "text-emerald-700" : "text-amber-700"}`}
-                    >
+                    <p className={`text-sm font-medium ${relevance.meets_threshold ? "text-emerald-700" : "text-amber-700"}`}>
                       {relevance.match_score != null
                         ? `${Math.round(relevance.match_score * 100)}% match`
                         : "Match score not available yet"}
@@ -272,16 +295,14 @@ export default function JobDetailModal({
                   </div>
                 )}
 
-                {applyError && (
-                  <p className="text-sm text-red-500">{applyError}</p>
-                )}
+                {applyError && <p className="text-sm text-red-500">{applyError}</p>}
 
                 {relevance && detail.scenario_enabled && showScenarioConfirm && (
                   <div className="rounded-lg p-4 border border-teal-200 bg-teal-50 space-y-3">
                     <p className="text-sm text-teal-800">
-                      This job requires a scenario-based test. Once you confirm,
-                      you'll be taken straight to it and the timer starts
-                      immediately — make sure you're ready before continuing.
+                      This job requires a scenario-based test. Once you confirm, you'll be taken
+                      straight to it and the timer starts immediately — make sure you're ready
+                      before continuing.
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -311,9 +332,7 @@ export default function JobDetailModal({
                     }
                     disabled={applying}
                     className={`w-full text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
-                      relevance.meets_threshold
-                        ? "bg-blue-600 hover:bg-blue-700"
-                        : "bg-amber-600 hover:bg-amber-500"
+                      relevance.meets_threshold ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-500"
                     }`}
                   >
                     {applying
@@ -328,10 +347,7 @@ export default function JobDetailModal({
           </>
         )}
 
-        <button
-          onClick={onClose}
-          className="mt-4 text-xs text-gray-400 hover:text-gray-600 w-full text-center"
-        >
+        <button onClick={onClose} className="mt-4 text-xs text-gray-400 hover:text-gray-600 w-full text-center">
           Close
         </button>
       </div>

@@ -27,7 +27,7 @@ from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting, JobStatus
 from app.db.models.resume_versions import ResumeVersion
-from app.repositories import application_repo, job_repo
+from app.repositories import application_repo, job_repo, scenario_repo
 from app.repositories.org_repo import get_org_for_user
 from app.schemas.application import (
     ApplicationCreate,
@@ -37,6 +37,7 @@ from app.schemas.application import (
 )
 from app.services.matching import compute_match_score
 from app.services.resume_selection import resolve_resume_version
+from app.services.override_quota import ensure_override_quota_current, is_unlimited
 from app.repositories.resume_repo import increment_override_usage
 
 router = APIRouter(prefix="/applications", tags=["applications"])
@@ -72,6 +73,7 @@ async def _get_candidate_profile(db: AsyncSession, user_id: uuid.UUID) -> Candid
 def _build_with_job_response(
     app: Application, job: JobPosting, org
 ) -> ApplicationWithJobResponse:
+    scenario_response = app.scenario_response
     return ApplicationWithJobResponse(
         id=app.id,
         job_id=app.job_id,
@@ -86,6 +88,14 @@ def _build_with_job_response(
         job_level=job.job_level,
         job_status=job.status,
         org_name=org.name if org else "Unknown",
+        scenario_enabled=job.scenario_enabled,
+        scenario_score=scenario_response.score if scenario_response else None,
+        scenario_ai_summary=scenario_response.ai_summary if scenario_response else None,
+        scenario_meets_threshold=(
+            scenario_response.score >= job.scenario_score_threshold
+            if scenario_response and scenario_response.score is not None
+            else None
+        ),
     )
 
 def _score(job: JobPosting, resume_version: ResumeVersion) -> Optional[float]:
@@ -125,6 +135,7 @@ async def apply(
         raise HTTPException(400, "This job is not accepting applications")
 
     profile = await _get_candidate_profile(db, user.id)
+    profile = await ensure_override_quota_current(db, profile)
     resume_version = await resolve_resume_version(db, profile, body.resume_version_id)
 
     existing = await application_repo.get_application_for_candidate_job(
@@ -140,16 +151,18 @@ async def apply(
     is_low_match = match_score is not None and match_score < job.match_threshold
 
     if is_low_match and not body.override:
+        assert match_score is not None
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={
                 "code": "low_match",
-                "message": "Your profile is not a strong match for this role based on your skills and experience.",
-                "match_score": round(match_score, 3), # type: ignore
+                "message": "...",
+                "match_score": round(match_score, 3),
                 "match_threshold": job.match_threshold,
                 "overrides_remaining": max(
                     0, profile.override_apps_limit - profile.override_apps_used
                 ),
+                "overrides_unlimited": is_unlimited(profile.override_apps_limit),
             },
         )
 
@@ -175,6 +188,8 @@ async def apply(
         resolved_status = ApplicationStatus.RESUME_PASSED  # threshold met or override used
 
     if existing and existing.status == ApplicationStatus.WITHDRAWN:
+        if job.scenario_enabled:
+            await scenario_repo.delete_attempt_for_application(db, existing.id)
         existing.status = resolved_status.value  # type: ignore
         existing.resume_version_id = resume_version.id
         existing.match_score = match_score
@@ -231,7 +246,8 @@ async def get_mine(
     result = await db.execute(
         select(Application)
         .options(
-            joinedload(Application.job_posting).joinedload(JobPosting.organization)
+            joinedload(Application.job_posting).joinedload(JobPosting.organization),
+            joinedload(Application.scenario_response),
         )
         .where(Application.id == application_id)
     )

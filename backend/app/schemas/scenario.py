@@ -32,6 +32,7 @@ class ScenarioResultResponse(BaseModel):
     scenario_score_threshold: float
     requires_override: bool
     overrides_remaining: int
+    overrides_unlimited: bool
 
 
 class ScenarioPreviewResponse(BaseModel):

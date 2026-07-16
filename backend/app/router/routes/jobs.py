@@ -2,7 +2,8 @@ from typing import Annotated, List, Optional
 from app.core.logging import logger
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from app.core.categories import JobCategory
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,10 +56,20 @@ async def list_mine(
     return await list_jobs_by_org(db, org.id)
 
 
+@router.get("/meta/categories", response_model=List[str])
+async def list_categories():
+    return [c.value for c in JobCategory]
+
+
 @router.get("/feed", response_model=List[JobResponse])
 async def feed(
     user: CandidateUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    categories: Optional[List[str]] = Query(default=None),
+    q: Optional[str] = None,
+    location: Optional[str] = None,
+    salary_min: Optional[int] = None,
+    salary_max: Optional[int] = None,
 ):
     """
     Returns published jobs for the candidate feed.
@@ -78,7 +89,26 @@ async def feed(
             detail="resume_required",
         )
 
-    return await list_published_jobs(db, categories=profile.categories)
+    jobs = await list_published_jobs(
+        db,
+        categories=categories,
+        search=q,
+        location=location,
+        salary_min=salary_min,
+        salary_max=salary_max,
+    )
+    return [
+        JobResponse(
+            id=job.id, org_id=job.org_id, title=job.title, description=job.description,
+            status=job.status, work_mode=job.work_mode, job_level=job.job_level,
+            location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
+            hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
+            match_threshold=job.match_threshold, categories=job.categories,
+            scenario_score_threshold=job.scenario_score_threshold,
+            org_name=job.organization.name if job.organization else None,
+        )
+        for job in jobs
+    ]
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)

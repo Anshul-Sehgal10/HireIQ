@@ -27,6 +27,7 @@ interface ScenarioResult {
   scenario_score_threshold: number;
   requires_override: boolean;
   overrides_remaining: number;
+  overrides_unlimited: boolean;
 }
 
 type Stage = "loading" | "in_progress" | "submitting" | "done" | "error";
@@ -207,8 +208,9 @@ function ScenarioContent() {
                 yet — you can use one of your monthly overrides to submit it anyway.
               </p>
               <p className="text-xs text-amber-400/80">
-                {result.overrides_remaining} override{result.overrides_remaining !== 1 ? "s" : ""}{" "}
-                remaining this month.
+                {result.overrides_unlimited
+                  ? "Unlimited overrides on your plan."
+                  : `${result.overrides_remaining} override${result.overrides_remaining !== 1 ? "s" : ""} remaining this month.`}
               </p>
               <button
                 onClick={confirmOverride}

@@ -87,3 +87,16 @@ async def get_response_for_application(
         select(ScenarioResponse).where(ScenarioResponse.application_id == application_id)
     )
     return result.scalar_one_or_none()
+
+async def delete_attempt_for_application(db: AsyncSession, application_id: uuid.UUID) -> None:
+    """Removes any prior question/response for this application, so a
+    withdraw-then-reapply gets a genuinely fresh attempt rather than being
+    permanently blocked by leftover rows from the withdrawn attempt."""
+    response = await get_response_for_application(db, application_id)
+    if response:
+        await db.delete(response)
+        await db.commit()
+    question = await get_question_for_application(db, application_id)
+    if question:
+        await db.delete(question)
+        await db.commit()
