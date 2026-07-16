@@ -4,7 +4,10 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/context/auth";
 import { ThemeProvider } from "@/context/theme";
 import { ToastProvider } from "@/components/ui/Toast";
-import "./globals.css";
+
+// Ignore TS complaints about side-effect CSS imports in Next.js app directory
+// @ts-expect-error: Implicit any for side-effect CSS import
+import "./globals.css"; 
 
 const inter = Inter({
   subsets: ["latin"],

@@ -1,5 +1,5 @@
-export { default as Button } from "./button";
-export type { ButtonProps, ButtonVariant, ButtonSize } from "./button";
+export { default as Button } from "./Button";
+export type { ButtonProps, ButtonVariant, ButtonSize } from "./Button";
 
 export { default as Badge } from "./Badge";
 export type { BadgeVariant } from "./Badge";
@@ -11,4 +11,5 @@ export { default as Modal } from "./Modal";
 export { default as SlideOver } from "./SlideOver";
 export { Skeleton, SkeletonText, SkeletonCard } from "./Skeleton";
 export { ToastProvider, useToast } from "./Toast";
-export { default as ThemeToggle } from "./Themetoggle";
+export { default as ThemeToggle } from "./ThemeToggle";
+export { default as PageHeader } from "./PageHeader";

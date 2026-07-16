@@ -15,6 +15,8 @@ import {
 import { NAVIGATION } from "@/lib/navigation";
 import { useSidebar } from "@/context/sidebar";
 import { useAuth } from "@/context/auth";
+import { cn } from "@/lib/utils";
+import ThemeToggle from "@/components/ui/ThemeToggle";
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -41,18 +43,23 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`
-        flex h-screen flex-col border-r border-slate-700
-        bg-slate-900 text-slate-100 transition-all duration-300
-        ${open ? "w-64" : "w-16"}
-      `}
+      className={cn(
+        "flex h-screen flex-col border-r border-border bg-card text-foreground transition-all duration-300",
+        open ? "w-64" : "w-16",
+      )}
     >
       {/* Header */}
-      <div className="flex h-16 items-center justify-between border-b border-slate-700 px-4">
-        {open && <div className="font-bold text-xl text-white">HireIQ</div>}
+      <div className="flex h-16 items-center justify-between border-b border-border px-4">
+        {open && (
+          <div className="flex items-center gap-2">
+            <span className="h-2 w-2 rounded-full bg-primary" />
+            <span className="text-lg font-bold tracking-tight text-foreground">HireIQ</span>
+          </div>
+        )}
         <button
           onClick={toggle}
-          className="rounded-md p-2 hover:bg-slate-700 text-slate-300"
+          aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           {open ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
         </button>
@@ -69,13 +76,12 @@ export default function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
-              className={`
-                flex items-center gap-3 rounded-lg px-3 py-2 transition-colors
-                ${active
-                  ? "bg-slate-600 text-white"
-                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
-                }
-              `}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                active
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
             >
               <Icon size={18} />
               {open && <span>{item.label}</span>}
@@ -84,18 +90,17 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Footer — profile popup trigger */}
-      <div className="border-t border-slate-700 p-2 relative" ref={menuRef}>
-
+      {/* Footer — theme toggle + profile popup trigger */}
+      <div className="relative border-t border-border p-2" ref={menuRef}>
         {/* Popup menu — renders above the footer */}
         {menuOpen && (
-          <div className="absolute bottom-full mb-2 left-0 w-56 bg-slate-800 border border-slate-700 rounded-xl shadow-xl overflow-hidden z-50">
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 overflow-hidden rounded-xl border border-border bg-popover shadow-xl">
             {/* User info header */}
-            <div className="px-3 py-2.5 border-b border-slate-700">
-              <p className="text-sm font-medium text-white truncate">
+            <div className="border-b border-border px-3 py-2.5">
+              <p className="truncate text-sm font-medium text-popover-foreground">
                 {user.full_name}
               </p>
-              <p className="text-xs text-slate-400 truncate capitalize">
+              <p className="truncate text-xs capitalize text-muted-foreground">
                 {user.role}
               </p>
             </div>
@@ -104,24 +109,24 @@ export default function Sidebar() {
             <div className="p-1">
               <button
                 onClick={() => { setMenuOpen(false); router.push("/profile"); }}
-                className="flex items-center gap-3 w-full px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <User size={15} />
                 Profile
               </button>
               <button
                 onClick={() => { setMenuOpen(false); router.push("/settings"); }}
-                className="flex items-center gap-3 w-full px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white rounded-lg transition-colors"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <Settings size={15} />
                 Settings
               </button>
 
-              <div className="border-t border-slate-700 my-1" />
+              <div className="my-1 border-t border-border" />
 
               <button
                 onClick={() => { setMenuOpen(false); logout(); }}
-                className="flex items-center gap-3 w-full px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 hover:text-red-300 rounded-lg transition-colors"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm text-danger transition-colors hover:bg-danger-bg"
               >
                 <LogOut size={15} />
                 Log out
@@ -130,23 +135,30 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* Trigger button */}
-        <button
-          onClick={() => setMenuOpen((v) => !v)}
-          className="flex items-center gap-3 w-full rounded-lg px-3 py-2 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-        >
-          <UserCircle size={20} />
-          {open && (
-            <div className="flex flex-col items-start min-w-0">
-              <span className="text-sm font-medium text-white truncate w-full">
-                {user.full_name ?? "Profile"}
-              </span>
-              <span className="text-xs text-slate-400 capitalize">
-                {user.role}
-              </span>
-            </div>
-          )}
-        </button>
+        <div className={cn("flex items-center gap-1", open ? "justify-between" : "flex-col")}>
+          {/* Trigger button */}
+          <button
+            onClick={() => setMenuOpen((v) => !v)}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+              !open && "flex-none justify-center px-2",
+            )}
+          >
+            <UserCircle size={20} className="shrink-0" />
+            {open && (
+              <div className="flex min-w-0 flex-col items-start">
+                <span className="w-full truncate text-sm font-medium text-foreground">
+                  {user.full_name ?? "Profile"}
+                </span>
+                <span className="text-xs capitalize text-muted-foreground">
+                  {user.role}
+                </span>
+              </div>
+            )}
+          </button>
+
+          <ThemeToggle />
+        </div>
       </div>
     </aside>
   );
