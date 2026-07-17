@@ -13,7 +13,9 @@ Backend agent fix these bugs, Frontend agents report backend bugs here:
 Frontend agent fix these bugs, Backend agents report frontend bugs here:
 
 - [] Logout redirects on home page not login
-- [Later] The filters in candidate job feed dosen't update with resume change, can fix it when we redesign the page
+- [] /jobs/feed response shape changed (from earlier pagination work): now { jobs, next_cursor, has_more }, not a bare array. candidate/jobs/page.tsx needs to read jobsData.jobs and wire infinite scroll via next_cursor.
+- [] ActiveResumeSwitcher doesn't refresh filters on resume switch: onSwitched should re-fetch /candidates/me/overview and update filters.categories/defaultCategories to the new resume's categories, not just replay the stale filters object into loadFeed.
+- [] Category/location/salary/text filters are now fully implemented server-side and should work as-is once (1) and (2) are addressed — no other frontend query-building changes needed, buildQuery() already sends the right params.
 
 ## Features
 

@@ -73,11 +73,18 @@ async def feed(
     db: Annotated[AsyncSession, Depends(get_db)],
     cursor: Optional[str] = None,
     limit: int = Query(default=10, ge=1, le=50),
+    categories: Optional[List[str]] = Query(default=None),
+    q: Optional[str] = Query(default=None, max_length=200),
+    location: Optional[str] = Query(default=None, max_length=255),
+    salary_min: Optional[int] = Query(default=None, ge=0),
+    salary_max: Optional[int] = Query(default=None, ge=0),
 ):
     """
-    Paginated published-job feed for the candidate, filtered by their
-    active resume's categories. Cursor-based — pass back `next_cursor`
-    from the previous response to fetch the next page.
+    Paginated published-job feed. Category/location/salary/text filters are
+    driven entirely by the query params — the frontend is responsible for
+    seeding `categories` from the candidate's active resume on first load
+    (via /candidates/me/overview) and updating it whenever that resume
+    changes; this route applies whatever it's given with no fallback.
     """
     result = await db.execute(
         select(CandidateProfile).where(CandidateProfile.user_id == user.id)
@@ -86,15 +93,25 @@ async def feed(
     if not profile or not profile.current_resume_version_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="resume_required")
 
+    if salary_min is not None and salary_max is not None and salary_min > salary_max:
+        raise HTTPException(400, "salary_min cannot exceed salary_max")
+
     try:
         jobs, has_more = await list_published_jobs(
-            db, categories=profile.categories, cursor=cursor, limit=limit
+            db,
+            categories=categories,
+            cursor=cursor,
+            limit=limit,
+            q=q,
+            location=location,
+            salary_min=salary_min,
+            salary_max=salary_max,
         )
     except ValueError:
         raise HTTPException(400, "Invalid pagination cursor")
 
     next_cursor = encode_cursor(jobs[-1].created_at, jobs[-1].id) if has_more and jobs else None
-    return JobFeedResponse(jobs=jobs, next_cursor=next_cursor, has_more=has_more) #type: ignore
+    return JobFeedResponse(jobs=jobs, next_cursor=next_cursor, has_more=has_more)  # type: ignore
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)
