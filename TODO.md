@@ -9,19 +9,26 @@ existing pages only — no new pages, no new business logic, no guessing at
 requirements. TODO.md is not edited directly by either agent going forward;
 each agent gives the user the content to paste in.
 
+## My Todos
+
+The Todos for the user, ai model ignore this section
+
+- [ ] make the pipeline_services file in the backend
+- [ ] test the pipeline flow
+
 ## Bugs
 
 ### Backend
 
 Backend agent fix these bugs, Frontend agents report backend bugs here:
 
-- [] Can't apply for job until scenario (if enabled) is completed
+- [ ] Can't apply for job until scenario (if enabled) is completed
 
 ### Frontend
 
 Frontend agent fix these bugs, Backend agents report frontend bugs here:
 
-- [] Logout redirects on home page not login
+- [ ] Logout redirects on home page not login
 
 ## Features
 
@@ -89,13 +96,13 @@ Pipeline feature (ranked dashboard + channel chat) is implemented:
   candidate dashboard (shown once an application reaches
   shortlisted/assessment/interview/offer).
 
-These are functional, minimally-styled pages. Frontend agent: feel free to
+- These are functional, minimally-styled pages. Frontend agent: feel free to
 restyle to match the rest of the app (Card/Button/PageHeader conventions,
 etc.) but do not change the data flow, add new routes, or alter the
 request/response handling — ping the backend agent first if something
 seems to need new logic.
 
-No WebSocket/live-push yet — messages are poll/refresh-based
+- No WebSocket/live-push yet — messages are poll/refresh-based
 (re-fetch on send). That's a planned follow-up backend increment.
 
-Patched candidate/jobs/page.tsx and lib/api.ts (backend agent) to fix a stale-response race condition — rapid filter changes could have an older response overwrite a newer one, making filters appear broken. Added a request-sequence guard + debounced text/salary/location inputs + cache: "no-store". No backend changes were needed this round; /jobs/feed filtering contract is confirmed correct via direct curl testing.
+- Patched candidate/jobs/page.tsx and lib/api.ts (backend agent) to fix a stale-response race condition — rapid filter changes could have an older response overwrite a newer one, making filters appear broken. Added a request-sequence guard + debounced text/salary/location inputs + cache: "no-store". No backend changes were needed this round; /jobs/feed filtering contract is confirmed correct via direct curl testing.
