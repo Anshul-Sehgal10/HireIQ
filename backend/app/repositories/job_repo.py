@@ -1,10 +1,11 @@
 import uuid
 from typing import Optional, List
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_
 from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.job import JobPosting, JobStatus
-from app.db.models.organization import Organization
+from app.core.pagination import decode_cursor
+
 
 async def create_job(db: AsyncSession, org_id: uuid.UUID, created_by: uuid.UUID, data: dict) -> JobPosting:
     job = JobPosting(org_id=org_id, created_by=created_by, **data)
@@ -13,9 +14,11 @@ async def create_job(db: AsyncSession, org_id: uuid.UUID, created_by: uuid.UUID,
     await db.refresh(job)
     return job
 
+
 async def get_job(db: AsyncSession, job_id: uuid.UUID) -> Optional[JobPosting]:
     result = await db.execute(select(JobPosting).where(JobPosting.id == job_id))
     return result.scalar_one_or_none()
+
 
 async def list_jobs_by_org(db: AsyncSession, org_id: uuid.UUID) -> List[JobPosting]:
     result = await db.execute(
@@ -25,19 +28,18 @@ async def list_jobs_by_org(db: AsyncSession, org_id: uuid.UUID) -> List[JobPosti
     )
     return list(result.scalars().all())
 
+
 async def list_published_jobs(
     db: AsyncSession,
     categories: Optional[List[str]] = None,
-    search: Optional[str] = None,
-    location: Optional[str] = None,
-    salary_min: Optional[int] = None,
-    salary_max: Optional[int] = None,
-) -> List[JobPosting]:
-    query = (
-        select(JobPosting)
-        .options(joinedload(JobPosting.organization))
-        .where(JobPosting.status == JobStatus.PUBLISHED)
-    )
+    cursor: Optional[str] = None,
+    limit: int = 10,
+) -> tuple[List[JobPosting], bool]:
+    """
+    Returns (jobs, has_more). Fetches limit+1 rows to cheaply detect a next
+    page without a separate COUNT query.
+    """
+    query = select(JobPosting).where(JobPosting.status == JobStatus.PUBLISHED)
     if categories:
         query = query.where(
             or_(
@@ -45,29 +47,26 @@ async def list_published_jobs(
                 JobPosting.categories.is_(None),
             )
         )
-    if search:
-        like = f"%{search}%"
+    if cursor:
+        cursor_created_at, cursor_id = decode_cursor(cursor)
         query = query.where(
             or_(
-                JobPosting.title.ilike(like),
-                JobPosting.organization.has(Organization.name.ilike(like)),
+                JobPosting.created_at < cursor_created_at,
+                and_(
+                    JobPosting.created_at == cursor_created_at,
+                    JobPosting.id < cursor_id,
+                ),
             )
         )
-    if location:
-        query = query.where(JobPosting.location.ilike(f"%{location}%"))
-    if salary_min is not None:
-        # A job matches if its range could plausibly satisfy the candidate's
-        # floor — an unset salary_max is treated as "unspecified", not "$0".
-        query = query.where(
-            or_(JobPosting.salary_max.is_(None), JobPosting.salary_max >= salary_min)
-        )
-    if salary_max is not None:
-        query = query.where(
-            or_(JobPosting.salary_min.is_(None), JobPosting.salary_min <= salary_max)
-        )
-    query = query.order_by(JobPosting.created_at.desc())
+    query = query.order_by(
+        JobPosting.created_at.desc(), JobPosting.id.desc()
+    ).limit(limit + 1)
+
     result = await db.execute(query)
-    return list(result.unique().scalars().all())
+    jobs = list(result.scalars().all())
+    has_more = len(jobs) > limit
+    return jobs[:limit], has_more
+
 
 async def update_job(db: AsyncSession, job: JobPosting, updates: dict) -> JobPosting:
     for key, value in updates.items():
@@ -76,6 +75,7 @@ async def update_job(db: AsyncSession, job: JobPosting, updates: dict) -> JobPos
     await db.commit()
     await db.refresh(job)
     return job
+
 
 async def publish_job(db: AsyncSession, job: JobPosting) -> JobPosting:
     from datetime import datetime, timezone
@@ -88,6 +88,7 @@ async def publish_job(db: AsyncSession, job: JobPosting) -> JobPosting:
     await db.commit()
     await db.refresh(job)
     return job
+
 
 async def reprocess_job(db: AsyncSession, job: JobPosting) -> tuple[JobPosting, bool]:
     from app.services.job_processing import process_job_extraction

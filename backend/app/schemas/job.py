@@ -1,5 +1,5 @@
 from uuid import UUID
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 from app.db.models.job import JobStatus, WorkMode, JobLevel
 
@@ -62,3 +62,8 @@ class JobExtractionDetailResponse(BaseModel):
     has_embedding: bool
 
     model_config = {"from_attributes": True}
+
+class JobFeedResponse(BaseModel):
+    jobs: List[JobResponse]
+    next_cursor: Optional[str] = None
+    has_more: bool = False

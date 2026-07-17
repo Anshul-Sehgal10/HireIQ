@@ -76,15 +76,22 @@ async def set_current_resume(
     db: AsyncSession,
     profile: CandidateProfile,
     resume_version_id: uuid.UUID,
-    embedding: Optional[list] = None,
-    categories: Optional[list[str]] = None,
+    embedding: Optional[list],
+    categories: Optional[list[str]],
 ) -> CandidateProfile:
+    """
+    Activates a resume version as the candidate's current one.
+
+    embedding/categories are set unconditionally, including to None. A
+    resume that hasn't finished processing (or whose extraction failed)
+    must clear out whatever the previously-active resume left behind —
+    silently keeping stale values would leave the candidate matched and
+    filtered against a resume they're no longer using.
+    """
     profile.current_resume_version_id = resume_version_id
     profile.resume_updated_at = datetime.now(timezone.utc)
-    if embedding is not None:
-        profile.resume_embedding = embedding
-    if categories is not None:
-        profile.categories = categories
+    profile.resume_embedding = embedding
+    profile.categories = categories
     await db.commit()
     await db.refresh(profile)
     return profile

@@ -1,13 +1,15 @@
 from typing import Annotated, List, Optional
-from app.core.logging import logger
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from app.core.categories import JobCategory
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import logger
+from app.core.categories import JobCategory
+from app.core.pagination import encode_cursor
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
+
 from app.db.models.candidate_profiles import CandidateProfile
 from app.repositories.job_repo import (
     close_job,
@@ -22,7 +24,11 @@ from app.repositories.job_repo import (
 )
 from app.repositories.org_repo import get_org_for_user
 
-from app.schemas.job import JobCreate, JobResponse, JobUpdate, JobDetailResponse, JobExtractionDetailResponse
+from app.schemas.job import (
+    JobCreate, JobResponse, JobUpdate, JobDetailResponse,
+    JobExtractionDetailResponse, JobFeedResponse,
+)
+
 from app.schemas.matching import RelevanceCheckResponse
 
 from app.services.matching import compute_match_score
@@ -61,54 +67,34 @@ async def list_categories():
     return [c.value for c in JobCategory]
 
 
-@router.get("/feed", response_model=List[JobResponse])
+@router.get("/feed", response_model=JobFeedResponse)
 async def feed(
     user: CandidateUser,
     db: Annotated[AsyncSession, Depends(get_db)],
-    categories: Optional[List[str]] = Query(default=None),
-    q: Optional[str] = None,
-    location: Optional[str] = None,
-    salary_min: Optional[int] = None,
-    salary_max: Optional[int] = None,
+    cursor: Optional[str] = None,
+    limit: int = Query(default=10, ge=1, le=50),
 ):
     """
-    Returns published jobs for the candidate feed.
-
-    Requires the candidate to have an uploaded resume — if they don't,
-    returns 403 with detail "resume_required" so the frontend can redirect
-    them to the upload flow instead of showing a generic error.
+    Paginated published-job feed for the candidate, filtered by their
+    active resume's categories. Cursor-based — pass back `next_cursor`
+    from the previous response to fetch the next page.
     """
-    # Gate: candidate must have uploaded a resume before browsing jobs
     result = await db.execute(
         select(CandidateProfile).where(CandidateProfile.user_id == user.id)
     )
     profile = result.scalar_one_or_none()
     if not profile or not profile.current_resume_version_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="resume_required",
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="resume_required")
 
-    jobs = await list_published_jobs(
-        db,
-        categories=categories,
-        search=q,
-        location=location,
-        salary_min=salary_min,
-        salary_max=salary_max,
-    )
-    return [
-        JobResponse(
-            id=job.id, org_id=job.org_id, title=job.title, description=job.description,
-            status=job.status, work_mode=job.work_mode, job_level=job.job_level,
-            location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
-            hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
-            match_threshold=job.match_threshold, categories=job.categories,
-            scenario_score_threshold=job.scenario_score_threshold,
-            org_name=job.organization.name if job.organization else None,
+    try:
+        jobs, has_more = await list_published_jobs(
+            db, categories=profile.categories, cursor=cursor, limit=limit
         )
-        for job in jobs
-    ]
+    except ValueError:
+        raise HTTPException(400, "Invalid pagination cursor")
+
+    next_cursor = encode_cursor(jobs[-1].created_at, jobs[-1].id) if has_more and jobs else None
+    return JobFeedResponse(jobs=jobs, next_cursor=next_cursor, has_more=has_more) #type: ignore
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)
