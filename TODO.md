@@ -1,12 +1,11 @@
 # Todo
 
-- [Done] Fix the auth flow, make it have a single source of truth only (cookies, not local storage)
-- [Done] Make it so when user registers, it logs them in as well
-- [Done] also i want you to help me implement a logout functionality, where the tokens will be stored temporarily and marked as blacklisted untill expired to simulate a logout
-- [Done] Migrate from middleware to proxy in frontend
-- [Done] Fix the sidebar, add profile page
-- [Done] Add docker to it
-- [ ] Can't apply for job until scenario (if enabled) is completed
+## Backend
+
+- [Later] Can't apply for job until scenario (if enabled) is completed
+
+## Frontend
+
 - [ ] ⚠️ Breaking change for the frontend
       /jobs/feed used to return a bare array; it now returns { jobs, next_cursor, has_more }. frontend/app/(app)/candidate/jobs/page.tsx currently does:
 
