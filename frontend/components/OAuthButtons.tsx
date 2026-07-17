@@ -2,18 +2,6 @@
 
 import { apiUrl } from "@/lib/api";
 
-/**
- * OAuthButtons component
- *
- * Drop this into your login / register page.
- * Clicking a button just redirects to the backend login initiator —
- * the backend handles everything from there.
- *
- * Usage:
- *   import OAuthButtons from "@/components/auth/OAuthButtons";
- *   <OAuthButtons mode="login" />
- */
-
 interface Props {
   mode?: "login" | "register"; // cosmetic only — same URL either way
 }
@@ -22,28 +10,27 @@ export default function OAuthButtons({ mode = "login" }: Props) {
   const label = mode === "login" ? "Continue" : "Sign up";
 
   const handleOAuth = (provider: "google" | "linkedin") => {
-    // Simple redirect — the backend sets the state cookie and redirects to provider
     window.location.href = apiUrl(`/auth/${provider}/login`);
   };
 
   return (
     <div className="flex flex-col gap-3 w-full">
-      {/* Google */}
       <button
         onClick={() => handleOAuth("google")}
         className="flex items-center justify-center gap-3 w-full px-4 py-2.5
-                   border border-border rounded-lg bg-background hover:bg-muted
-                   transition-colors text-sm font-medium"
+                   border border-border rounded-lg bg-card hover:bg-muted
+                   transition-colors text-sm font-medium text-foreground"
       >
         <GoogleIcon />
         {label} with Google
       </button>
 
-      {/* LinkedIn */}
+      {/* LinkedIn brand blue is an intentional exception — brand recognition,
+          not a semantic status color, so it stays fixed across themes. */}
       <button
         onClick={() => handleOAuth("linkedin")}
         className="flex items-center justify-center gap-3 w-full px-4 py-2.5
-                   border border-border rounded-lg bg-[#0077B5] hover:bg-[#006399]
+                   border border-transparent rounded-lg bg-[#0A66C2] hover:bg-[#0958A8]
                    transition-colors text-sm font-medium text-white"
       >
         <LinkedInIcon />
@@ -52,10 +39,6 @@ export default function OAuthButtons({ mode = "login" }: Props) {
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Inline SVG icons (no extra dependencies)
-// ---------------------------------------------------------------------------
 
 function GoogleIcon() {
   return (
