@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
 import EmployerJobDetailModal from "@/components/EmployerJobDetailModal";
+import { StatusBadge } from "@/components/ui";
 
 interface JobDetail {
   id: string;
@@ -284,24 +285,6 @@ function JobsContent() {
         />
       )}
     </div>
-  );
-}
-
-
-function StatusBadge({ status }: { status: string }) {
-  const s = status?.toLowerCase() || "draft";
-  const styles: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700 border-gray-200",
-    published: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    paused: "bg-amber-50 text-amber-700 border-amber-200",
-    closed: "bg-rose-50 text-rose-700 border-rose-200",
-  };
-  return (
-    <span
-      className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border capitalize ${styles[s] ?? styles.draft}`}
-    >
-      {status}
-    </span>
   );
 }
 

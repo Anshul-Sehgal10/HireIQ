@@ -1,94 +1,47 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { ThemeProvider as NextThemesProvider, useTheme as useNextTheme } from "next-themes";
+import type { ReactNode } from "react";
 
-type ThemePreference = "light" | "dark" | "system";
-type ResolvedTheme = "light" | "dark";
-
-const STORAGE_KEY = "hireiq-theme";
-
-interface ThemeCtx {
-  theme: ResolvedTheme;
-  preference: ThemePreference;
-  setTheme: (pref: ThemePreference) => void;
-  toggleTheme: () => void;
-}
-
-const ThemeContext = createContext<ThemeCtx>({
-  theme: "light",
-  preference: "system",
-  setTheme: () => {},
-  toggleTheme: () => {},
-});
-
-function getSystemTheme(): ResolvedTheme {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyThemeClass(theme: ResolvedTheme) {
-  const root = document.documentElement;
-  root.classList.toggle("dark", theme === "dark");
-  root.style.colorScheme = theme;
+/**
+ * Thin wrapper so app/layout.tsx and every consumer can keep importing
+ * ThemeProvider/useTheme from "@/context/theme" — the actual state engine
+ * underneath is next-themes now, not a hand-rolled context.
+ *
+ * attribute="data-theme" (not the default "class") so it matches the
+ * [data-theme='dark'] selectors in globals.css. next-themes injects its own
+ * pre-hydration <script> into <html> that sets this attribute before first
+ * paint, which is what makes this flash-free — no blocking script needed
+ * in layout.tsx anymore.
+ */
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  return (
+    <NextThemesProvider
+      attribute="data-theme"
+      defaultTheme="system"
+      enableSystem
+      disableTransitionOnChange
+    >
+      {children}
+    </NextThemesProvider>
+  );
 }
 
 /**
- * Mirrors the AuthProvider / SidebarProvider pattern. The blocking script
- * in layout.tsx already applies the correct class before first paint —
- * this provider just picks up that same decision on mount so there's no
- * mismatch, then owns all subsequent changes.
+ * Same external shape the app already used (theme / toggleTheme / setTheme /
+ * preference), backed by next-themes' useTheme(). `theme` is always the
+ * *resolved* value ("light" | "dark") since that's what components need to
+ * decide which icon/tokens to render — "system" is only ever a preference,
+ * never something a consumer branches on.
  */
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [preference, setPreference] = useState<ThemePreference>("system");
-  const [theme, setResolvedTheme] = useState<ResolvedTheme>("light");
+export function useTheme() {
+  const { theme, resolvedTheme, setTheme } = useNextTheme();
+  const current = (resolvedTheme ?? "light") as "light" | "dark";
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY) as ThemePreference | null;
-    const initialPref: ThemePreference =
-      stored === "light" || stored === "dark" || stored === "system"
-        ? stored
-        : "system";
-    setPreference(initialPref);
-    setResolvedTheme(initialPref === "system" ? getSystemTheme() : initialPref);
-  }, []);
-
-  useEffect(() => {
-    applyThemeClass(theme);
-  }, [theme]);
-
-  useEffect(() => {
-    if (preference !== "system") return;
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => setResolvedTheme(getSystemTheme());
-    mql.addEventListener("change", handler);
-    return () => mql.removeEventListener("change", handler);
-  }, [preference]);
-
-  const setTheme = useCallback((pref: ThemePreference) => {
-    setPreference(pref);
-    setResolvedTheme(pref === "system" ? getSystemTheme() : pref);
-    localStorage.setItem(STORAGE_KEY, pref);
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
-
-  const value = useMemo(
-    () => ({ theme, preference, setTheme, toggleTheme }),
-    [theme, preference, setTheme, toggleTheme],
-  );
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return {
+    theme: current,
+    preference: (theme ?? "system") as "light" | "dark" | "system",
+    setTheme: (pref: "light" | "dark" | "system") => setTheme(pref),
+    toggleTheme: () => setTheme(current === "dark" ? "light" : "dark"),
+  };
 }
-
-export const useTheme = () => useContext(ThemeContext);

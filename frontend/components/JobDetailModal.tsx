@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MapPin, Briefcase } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { SlideOver, Button, Badge, Skeleton, SkeletonText } from "@/components/ui";
 
 interface JobDetail {
   id: string;
@@ -55,11 +57,7 @@ interface Props {
 }
 
 export default function JobDetailModal({
-  jobId,
-  resumeVersions,
-  application,
-  onClose,
-  onApplied,
+  jobId, resumeVersions, application, onClose, onApplied,
 }: Props) {
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -133,224 +131,175 @@ export default function JobDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
-        {loading && <p className="text-sm text-gray-400 animate-pulse">Loading…</p>}
-        {loadError && <p className="text-sm text-red-500">{loadError}</p>}
+    <SlideOver open onClose={onClose} title={loading ? "Loading…" : detail?.title} width="lg">
+      {loading && (
+        <div className="space-y-4">
+          <Skeleton className="h-4 w-1/3" />
+          <SkeletonText lines={4} />
+        </div>
+      )}
+      {loadError && <p className="text-sm text-danger">{loadError}</p>}
 
-        {detail && (
-          <>
-            <div className="mb-4">
-              <h2 className="text-lg font-bold text-gray-900 mb-1">{detail.title}</h2>
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span>{detail.org_name}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded-full border capitalize ${
-                    detail.org_verification_status === "verified"
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-amber-50 text-amber-700 border-amber-200"
-                  }`}
-                >
-                  {detail.org_verification_status}
-                </span>
-              </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {[detail.location, detail.work_mode, detail.job_level].filter(Boolean).join(" · ")}
+      {detail && (
+        <div className="space-y-6">
+          <div>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>{detail.org_name}</span>
+              <Badge variant={detail.org_verification_status === "verified" ? "success" : "warning"}>
+                {detail.org_verification_status}
+              </Badge>
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              {detail.location && <span className="flex items-center gap-1.5"><MapPin size={13} />{detail.location}</span>}
+              {detail.work_mode && <span className="capitalize flex items-center gap-1.5"><Briefcase size={13} />{detail.work_mode}</span>}
+              {detail.job_level && <span className="capitalize">{detail.job_level} level</span>}
+            </div>
+            {(detail.salary_min || detail.salary_max) && (
+              <p className="mt-2 text-sm font-medium text-foreground">
+                {detail.salary_min && detail.salary_max
+                  ? `₹${detail.salary_min.toLocaleString()} – ₹${detail.salary_max.toLocaleString()}`
+                  : detail.salary_min ? `From ₹${detail.salary_min.toLocaleString()}` : `Up to ₹${detail.salary_max!.toLocaleString()}`}
               </p>
-              {(detail.salary_min || detail.salary_max) && (
-                <p className="text-sm text-gray-500 mt-1">
-                  {detail.salary_min && detail.salary_max
-                    ? `₹${detail.salary_min.toLocaleString()} – ₹${detail.salary_max.toLocaleString()}`
-                    : detail.salary_min
-                      ? `From ₹${detail.salary_min.toLocaleString()}`
-                      : `Up to ₹${detail.salary_max!.toLocaleString()}`}
-                </p>
-              )}
-              {detail.categories && detail.categories.length > 0 && (
-                <div className="flex gap-1.5 mt-2 flex-wrap">
-                  {detail.categories.map((c) => (
-                    <span key={c} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full capitalize">
-                      {c.replace(/_/g, " ")}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.description}</p>
-            </div>
-
-            {detail.scenario_enabled && (
-              <div className="border-t border-gray-100 pt-4 mb-4">
-                <p className="text-xs font-semibold text-teal-700 uppercase tracking-wide">
-                  Includes a scenario question
-                </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  After you apply, you'll be asked a role-specific scenario question with a time
-                  limit. You'll need to score at least{" "}
-                  {Math.round(detail.scenario_score_threshold * 100)}% to pass — if you don't,
-                  you can use a monthly override to submit anyway. It's generated when you apply,
-                  so there's nothing to preview beforehand.
-                </p>
+            )}
+            {detail.categories && detail.categories.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-1.5">
+                {detail.categories.map((c) => (
+                  <span key={c} className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium capitalize text-primary">
+                    {c.replace(/_/g, " ")}
+                  </span>
+                ))}
               </div>
             )}
+          </div>
 
-            {application ? (
-              <div className="border-t border-gray-100 pt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-emerald-700">You've applied to this job.</p>
-                  <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 capitalize">
-                    {application.status.replace(/_/g, " ")}
+          <div className="border-t border-border pt-5">
+            <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{detail.description}</p>
+          </div>
+
+          {detail.scenario_enabled && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Includes a scenario question</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                After you apply, you'll be asked a role-specific scenario question with a time
+                limit. You'll need to score at least{" "}
+                {Math.round(detail.scenario_score_threshold * 100)}% to pass — if you don't,
+                you can use a monthly override to submit anyway. It's generated when you apply,
+                so there's nothing to preview beforehand.
+              </p>
+            </div>
+          )}
+
+          {application ? (
+            <div className="space-y-3 border-t border-border pt-5">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-success-foreground">You've applied to this job.</p>
+                <Badge>{application.status.replace(/_/g, " ")}</Badge>
+              </div>
+
+              {application.match_score != null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Resume match</span>
+                  <span className="font-medium text-foreground">{Math.round(application.match_score * 100)}%</span>
+                </div>
+              )}
+
+              {detail.scenario_enabled && application.scenario_score != null && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Scenario score</span>
+                  <span className={`font-medium ${application.scenario_meets_threshold === false ? "text-warning" : "text-foreground"}`}>
+                    {Math.round(application.scenario_score * 100)}%
+                    {application.scenario_meets_threshold === false && " (below bar)"}
                   </span>
                 </div>
+              )}
 
-                {application.match_score != null && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Resume match</span>
-                    <span className="font-medium text-gray-900">
-                      {Math.round(application.match_score * 100)}%
-                    </span>
-                  </div>
-                )}
+              {application.is_override && (
+                <p className="text-xs text-warning">You used a monthly override on this application.</p>
+              )}
 
-                {detail.scenario_enabled && application.scenario_score != null && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500">Scenario score</span>
-                    <span
-                      className={`font-medium ${
-                        application.scenario_meets_threshold === false ? "text-amber-600" : "text-gray-900"
-                      }`}
-                    >
-                      {Math.round(application.scenario_score * 100)}%
-                      {application.scenario_meets_threshold === false && " (below bar)"}
-                    </span>
-                  </div>
-                )}
-
-                {application.is_override && (
-                  <p className="text-xs text-amber-600">You used a monthly override on this application.</p>
-                )}
-
-                {application.status === "scenario_pending" && (
-                  <a
-                    href={
-                      application.scenario_score != null
-                        ? "/candidate/dashboard"
-                        : `/candidate/scenario/${application.id}`
-                    }
-                    className="block text-center text-xs bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2 rounded-lg transition-colors"
-                  >
-                    {application.scenario_score != null ? "Manage on dashboard" : "Continue to scenario test"}
-                  </a>
-                )}
+              {application.status === "scenario_pending" && (
+                <a
+                  href={application.scenario_score != null ? "/candidate/dashboard" : `/candidate/scenario/${application.id}`}
+                  className="block rounded-lg bg-primary py-2 text-center text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary-hover"
+                >
+                  {application.scenario_score != null ? "Manage on dashboard" : "Continue to scenario test"}
+                </a>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4 border-t border-border pt-5">
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Resume to use
+                </label>
+                <select
+                  value={selectedResumeId}
+                  onChange={(e) => { setSelectedResumeId(e.target.value); setRelevance(null); }}
+                  className="w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  {resumeVersions.map((rv) => (
+                    <option key={rv.id} value={rv.id}>
+                      {rv.label ?? `Version ${rv.version_number}`}{rv.is_current ? " (active)" : ""}
+                    </option>
+                  ))}
+                </select>
               </div>
-            ) : (
-              <div className="border-t border-gray-100 pt-4 space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-                    Resume to use
-                  </label>
-                  <select
-                    value={selectedResumeId}
-                    onChange={(e) => {
-                      setSelectedResumeId(e.target.value);
-                      setRelevance(null);
-                    }}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
-                  >
-                    {resumeVersions.map((rv) => (
-                      <option key={rv.id} value={rv.id}>
-                        {rv.label ?? `Version ${rv.version_number}`}
-                        {rv.is_current ? " (active)" : ""}
-                      </option>
-                    ))}
-                  </select>
+
+              {!relevance && (
+                <Button className="w-full" loading={checking} disabled={!selectedResumeId} onClick={checkRelevance}>
+                  Check relevance
+                </Button>
+              )}
+
+              {relevance && (
+                <div className={`rounded-lg border p-4 ${relevance.meets_threshold ? "border-success-border bg-success-bg" : "border-warning-border bg-warning-bg"}`}>
+                  <p className={`text-sm font-medium ${relevance.meets_threshold ? "text-success-foreground" : "text-warning-foreground"}`}>
+                    {relevance.match_score != null ? `${Math.round(relevance.match_score * 100)}% match` : "Match score not available yet"}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {relevance.meets_threshold
+                      ? "This looks like a strong match for your profile."
+                      : "Your profile is not a strong match for this role based on your skills and experience."}
+                  </p>
                 </div>
+              )}
 
-                {!relevance && (
-                  <button
-                    onClick={checkRelevance}
-                    disabled={checking || !selectedResumeId}
-                    className="w-full bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50"
-                  >
-                    {checking ? "Checking…" : "Check relevance"}
-                  </button>
-                )}
+              {applyError && <p className="text-sm text-danger">{applyError}</p>}
 
-                {relevance && (
-                  <div
-                    className={`rounded-lg p-4 border ${relevance.meets_threshold ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}
-                  >
-                    <p className={`text-sm font-medium ${relevance.meets_threshold ? "text-emerald-700" : "text-amber-700"}`}>
-                      {relevance.match_score != null
-                        ? `${Math.round(relevance.match_score * 100)}% match`
-                        : "Match score not available yet"}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {relevance.meets_threshold
-                        ? "This looks like a strong match for your profile."
-                        : "Your profile is not a strong match for this role based on your skills and experience."}
-                    </p>
+              {relevance && detail.scenario_enabled && showScenarioConfirm && (
+                <div className="space-y-3 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <p className="text-sm text-foreground">
+                    This job requires a scenario-based test. Once you confirm, you'll be taken
+                    straight to it and the timer starts immediately — make sure you're ready
+                    before continuing.
+                  </p>
+                  <div className="flex gap-2">
+                    <Button className="flex-1" loading={applying} onClick={() => submitApply(!relevance.meets_threshold)}>
+                      Yes, start the test
+                    </Button>
+                    <Button variant="outline" className="flex-1" disabled={applying} onClick={() => setShowScenarioConfirm(false)}>
+                      Not yet
+                    </Button>
                   </div>
-                )}
+                </div>
+              )}
 
-                {applyError && <p className="text-sm text-red-500">{applyError}</p>}
-
-                {relevance && detail.scenario_enabled && showScenarioConfirm && (
-                  <div className="rounded-lg p-4 border border-teal-200 bg-teal-50 space-y-3">
-                    <p className="text-sm text-teal-800">
-                      This job requires a scenario-based test. Once you confirm, you'll be taken
-                      straight to it and the timer starts immediately — make sure you're ready
-                      before continuing.
-                    </p>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => submitApply(!relevance.meets_threshold)}
-                        disabled={applying}
-                        className="flex-1 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 text-white text-sm font-semibold py-2 rounded-lg transition-colors"
-                      >
-                        {applying ? "Submitting…" : "Yes, start the test"}
-                      </button>
-                      <button
-                        onClick={() => setShowScenarioConfirm(false)}
-                        disabled={applying}
-                        className="flex-1 bg-white border border-gray-300 text-gray-700 text-sm font-medium py-2 rounded-lg transition-colors"
-                      >
-                        Not yet
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {relevance && (!detail.scenario_enabled || !showScenarioConfirm) && (
-                  <button
-                    onClick={() =>
-                      detail.scenario_enabled
-                        ? setShowScenarioConfirm(true)
-                        : submitApply(!relevance.meets_threshold)
-                    }
-                    disabled={applying}
-                    className={`w-full text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-50 ${
-                      relevance.meets_threshold ? "bg-blue-600 hover:bg-blue-700" : "bg-amber-600 hover:bg-amber-500"
-                    }`}
-                  >
-                    {applying
-                      ? "Submitting…"
-                      : relevance.meets_threshold
-                        ? "Apply"
-                        : `Apply anyway${overridesRemaining != null ? ` (${overridesRemaining} left)` : ""}`}
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
-
-        <button onClick={onClose} className="mt-4 text-xs text-gray-400 hover:text-gray-600 w-full text-center">
-          Close
-        </button>
-      </div>
-    </div>
+              {relevance && (!detail.scenario_enabled || !showScenarioConfirm) && (
+                <Button
+                  className="w-full"
+                  variant={relevance.meets_threshold ? "primary" : "secondary"}
+                  loading={applying}
+                  onClick={() =>
+                    detail.scenario_enabled ? setShowScenarioConfirm(true) : submitApply(!relevance.meets_threshold)
+                  }
+                >
+                  {relevance.meets_threshold ? "Apply" : `Apply anyway${overridesRemaining != null ? ` (${overridesRemaining} left)` : ""}`}
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </SlideOver>
   );
 }

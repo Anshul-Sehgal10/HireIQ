@@ -8,10 +8,26 @@ import JobDetailModal from "@/components/JobDetailModal";
 import ResumeUpload from "@/components/ResumeUpload";
 
 const ALL_CATEGORIES = [
-  "backend", "frontend", "fullstack", "mobile", "devops_cloud", "data_ml",
-  "qa_testing", "security", "design_ux", "product_management",
-  "embedded_systems", "game_dev", "blockchain", "sales", "marketing",
-  "hr_recruiting", "finance", "operations", "customer_support", "other",
+  "backend",
+  "frontend",
+  "fullstack",
+  "mobile",
+  "devops_cloud",
+  "data_ml",
+  "qa_testing",
+  "security",
+  "design_ux",
+  "product_management",
+  "embedded_systems",
+  "game_dev",
+  "blockchain",
+  "sales",
+  "marketing",
+  "hr_recruiting",
+  "finance",
+  "operations",
+  "customer_support",
+  "other",
 ];
 
 interface Job {
@@ -83,7 +99,9 @@ function ActiveResumeSwitcher({
     if (!id || id === current?.id) return;
     setSwitching(true);
     try {
-      const res = await apiFetch(`/resumes/${id}/set-current`, { method: "POST" });
+      const res = await apiFetch(`/resumes/${id}/set-current`, {
+        method: "POST",
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail ?? "Failed to switch active resume");
@@ -111,7 +129,11 @@ function ActiveResumeSwitcher({
           </option>
         ))}
       </select>
-      {switching && <span className="text-xs text-muted-foreground animate-pulse">Switching…</span>}
+      {switching && (
+        <span className="text-xs text-muted-foreground animate-pulse">
+          Switching…
+        </span>
+      )}
     </div>
   );
 }
@@ -178,10 +200,14 @@ function FilterBar({
           onClick={() => setShowCategoryPicker((v) => !v)}
           className="text-sm border border-input rounded-lg px-3 py-1.5 text-foreground bg-card"
         >
-          Categories {filters.categories.length > 0 && `(${filters.categories.length})`}
+          Categories{" "}
+          {filters.categories.length > 0 && `(${filters.categories.length})`}
         </button>
         {!categoriesAreDefault && (
-          <button onClick={onReset} className="text-xs text-primary hover:text-primary-hover">
+          <button
+            onClick={onReset}
+            className="text-xs text-primary hover:text-primary-hover"
+          >
             Reset to my profile filters
           </button>
         )}
@@ -216,13 +242,21 @@ function FilterBar({
   );
 }
 
-const EMPTY_FILTERS: Filters = { q: "", categories: [], location: "", salary_min: "", salary_max: "" };
+const EMPTY_FILTERS: Filters = {
+  q: "",
+  categories: [],
+  location: "",
+  salary_min: "",
+  salary_max: "",
+};
 
 function JobFeed() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
-  const [feedStatus, setFeedStatus] = useState<"loading" | "resume_required" | "ok" | "error">("loading");
+  const [feedStatus, setFeedStatus] = useState<
+    "loading" | "resume_required" | "ok" | "error"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
 
@@ -286,11 +320,12 @@ function JobFeed() {
       }
       if (!jobsRes.ok) throw new Error("Failed to load jobs");
 
-      const [jobsData, appsData, resumesData]: [JobFeedResponse, any, any] = await Promise.all([
-        jobsRes.json(),
-        appsRes.ok ? appsRes.json() : [],
-        resumesRes.ok ? resumesRes.json() : [],
-      ]);
+      const [jobsData, appsData, resumesData]: [JobFeedResponse, any, any] =
+        await Promise.all([
+          jobsRes.json(),
+          appsRes.ok ? appsRes.json() : [],
+          resumesRes.ok ? resumesRes.json() : [],
+        ]);
 
       setJobs(Array.isArray(jobsData?.jobs) ? jobsData.jobs : []);
       setNextCursor(jobsData?.next_cursor ?? null);
@@ -309,10 +344,15 @@ function JobFeed() {
     if (loadingMore || !hasMore || !nextCursor) return;
     setLoadingMore(true);
     try {
-      const res = await apiFetch(`/jobs/feed${buildQuery(filters, nextCursor)}`);
+      const res = await apiFetch(
+        `/jobs/feed${buildQuery(filters, nextCursor)}`,
+      );
       if (!res.ok) throw new Error("Failed to load more jobs");
       const data: JobFeedResponse = await res.json();
-      setJobs((prev) => [...prev, ...(Array.isArray(data.jobs) ? data.jobs : [])]);
+      setJobs((prev) => [
+        ...prev,
+        ...(Array.isArray(data.jobs) ? data.jobs : []),
+      ]);
       setNextCursor(data.next_cursor ?? null);
       setHasMore(Boolean(data.has_more));
     } catch (e: any) {
@@ -324,6 +364,34 @@ function JobFeed() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadingMore, hasMore, nextCursor, filters]);
+
+  const handleResumeSwitch = async () => {
+    try {
+      const [overviewRes, resumesRes] = await Promise.all([
+        apiFetch("/candidates/me/overview"),
+        apiFetch("/resumes/"),
+      ]);
+
+      if (resumesRes.ok) {
+        const resumesData = await resumesRes.json();
+        setResumeVersions(Array.isArray(resumesData) ? resumesData : []);
+      }
+
+      if (overviewRes.ok) {
+        const data = await overviewRes.json();
+        const cats: string[] = data.resume_categories ?? [];
+        setDefaultCategories(cats);
+        // Updating filters triggers the existing useEffect([initialized, filters])
+        // which calls loadFeed(filters) for us — no need to call it directly.
+        setFilters((f) => ({ ...f, categories: cats }));
+      } else {
+        // Overview failed — fall back to at least refreshing the feed as-is.
+        loadFeed(filters);
+      }
+    } catch {
+      loadFeed(filters);
+    }
+  };
 
   useEffect(() => {
     if (!initialized) return;
@@ -348,16 +416,22 @@ function JobFeed() {
   }, [feedStatus, hasMore, loadMore]);
 
   const handleWithdraw = async (jobId: string) => {
-    const application = applications.find((a) => a.job_id === jobId && a.status !== "withdrawn");
+    const application = applications.find(
+      (a) => a.job_id === jobId && a.status !== "withdrawn",
+    );
     if (!application) return;
     try {
-      const res = await apiFetch(`/applications/${application.id}/withdraw`, { method: "POST" });
+      const res = await apiFetch(`/applications/${application.id}/withdraw`, {
+        method: "POST",
+      });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.detail ?? "Failed to withdraw");
       }
       setApplications((prev) =>
-        prev.map((a) => (a.id === application.id ? { ...a, status: "withdrawn" } : a)),
+        prev.map((a) =>
+          a.id === application.id ? { ...a, status: "withdrawn" } : a,
+        ),
       );
     } catch (e: any) {
       setError(e.message);
@@ -368,7 +442,9 @@ function JobFeed() {
     return (
       <div className="max-w-lg mx-auto p-8">
         <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
-          <h1 className="text-xl font-bold text-foreground mb-2">Upload your resume first</h1>
+          <h1 className="text-xl font-bold text-foreground mb-2">
+            Upload your resume first
+          </h1>
           <p className="text-muted-foreground text-sm mb-6">
             You need to upload a resume before you can browse and apply to jobs.
           </p>
@@ -382,23 +458,29 @@ function JobFeed() {
     applications.filter((a) => a.status !== "withdrawn").map((a) => a.job_id),
   );
   const categoriesAreDefault =
-    JSON.stringify([...filters.categories].sort()) === JSON.stringify([...defaultCategories].sort());
+    JSON.stringify([...filters.categories].sort()) ===
+    JSON.stringify([...defaultCategories].sort());
 
   return (
     <div className="max-w-3xl mx-auto p-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold text-foreground">Job Feed</h1>
-        <Link href="/candidate/resumes" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/candidate/resumes"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           Manage resumes
         </Link>
       </div>
 
-      <ActiveResumeSwitcher resumeVersions={resumeVersions} onSwitched={() => loadFeed(filters)} />
+      <ActiveResumeSwitcher resumeVersions={resumeVersions} onSwitched={handleResumeSwitch} />
 
       <FilterBar
         filters={filters}
         onChange={setFilters}
-        onReset={() => setFilters((f) => ({ ...f, categories: defaultCategories }))}
+        onReset={() =>
+          setFilters((f) => ({ ...f, categories: defaultCategories }))
+        }
         categoriesAreDefault={categoriesAreDefault}
       />
 
@@ -409,17 +491,23 @@ function JobFeed() {
       )}
 
       {feedStatus === "loading" && (
-        <p className="text-muted-foreground text-sm text-center py-12 animate-pulse">Loading jobs…</p>
+        <p className="text-muted-foreground text-sm text-center py-12 animate-pulse">
+          Loading jobs…
+        </p>
       )}
 
       {feedStatus === "ok" && jobs.length === 0 && (
-        <p className="text-muted-foreground text-sm text-center py-12">No jobs match your filters.</p>
+        <p className="text-muted-foreground text-sm text-center py-12">
+          No jobs match your filters.
+        </p>
       )}
 
       <div className="space-y-4">
         {jobs.map((job) => {
           const applied = appliedJobIds.has(job.id);
-          const meta = [job.location, job.work_mode, job.job_level].filter(Boolean).join(" · ");
+          const meta = [job.location, job.work_mode, job.job_level]
+            .filter(Boolean)
+            .join(" · ");
 
           return (
             <div
@@ -429,18 +517,31 @@ function JobFeed() {
             >
               <div className="flex justify-between items-start gap-4">
                 <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-foreground text-base">{job.title}</h2>
-                  {job.org_name && <p className="text-sm text-muted-foreground">{job.org_name}</p>}
+                  <h2 className="font-semibold text-foreground text-base">
+                    {job.title}
+                  </h2>
+                  {job.org_name && (
+                    <p className="text-sm text-muted-foreground">
+                      {job.org_name}
+                    </p>
+                  )}
                   {job.scenario_enabled && (
                     <span className="inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium mt-1">
                       Scenario question
                     </span>
                   )}
-                  {meta && <p className="text-sm text-muted-foreground mt-0.5">{meta}</p>}
+                  {meta && (
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {meta}
+                    </p>
+                  )}
                   {job.categories && job.categories.length > 0 && (
                     <div className="flex flex-wrap gap-2 mt-2">
                       {job.categories.map((c) => (
-                        <span key={c} className="inline-block bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full capitalize">
+                        <span
+                          key={c}
+                          className="inline-block bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full capitalize"
+                        >
                           {c.replace(/_/g, " ")}
                         </span>
                       ))}
@@ -455,7 +556,9 @@ function JobFeed() {
                           : `Up to ₹${job.salary_max!.toLocaleString()}`}
                     </p>
                   )}
-                  <p className="text-sm text-muted-foreground mt-3 line-clamp-3">{job.description}</p>
+                  <p className="text-sm text-muted-foreground mt-3 line-clamp-3">
+                    {job.description}
+                  </p>
                 </div>
                 <div className="shrink-0">
                   {applied && (
@@ -490,7 +593,9 @@ function JobFeed() {
         </div>
       )}
       {feedStatus === "ok" && !hasMore && jobs.length > 0 && (
-        <p className="text-center text-xs text-muted-foreground py-8">You've reached the end of the feed.</p>
+        <p className="text-center text-xs text-muted-foreground py-8">
+          You've reached the end of the feed.
+        </p>
       )}
 
       {detailJobId && (

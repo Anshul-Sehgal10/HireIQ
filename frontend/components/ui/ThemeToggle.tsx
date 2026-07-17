@@ -1,11 +1,25 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "@/context/theme";
 import { cn } from "@/lib/utils";
 
 export default function ThemeToggle({ className }: { className?: string }) {
   const { theme, toggleTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // resolvedTheme is undefined on the server and on the very first client
+  // render (next-themes needs a tick to read localStorage/system pref).
+  // Rendering a theme-dependent icon before that resolves would mismatch
+  // between server and client HTML — so render an inert placeholder of the
+  // same footprint until we're safely past hydration.
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return <div className={cn("h-8 w-8 rounded-lg", className)} aria-hidden="true" />;
+  }
+
   const isDark = theme === "dark";
 
   return (

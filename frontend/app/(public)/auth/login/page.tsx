@@ -1,10 +1,10 @@
 "use client";
 
 import { useState, FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { CheckCircle2 } from "lucide-react";
 import OAuthButtons from "@/components/OAuthButtons";
-import ThemeToggle from "@/components/ui/ThemeToggle";
+import AuthHeader from "@/components/AuthHeader";
 import Button from "@/components/ui/Button";
 import { Field, Input } from "@/components/ui/Input";
 import { apiUrl } from "@/lib/api";
@@ -12,9 +12,7 @@ import { useAuth } from "@/context/auth";
 
 function getAccessTokenFromCookie(): string | null {
   if (typeof document === "undefined") return null;
-  const match = document.cookie
-    .split("; ")
-    .find((row) => row.startsWith("access_token="));
+  const match = document.cookie.split("; ").find((row) => row.startsWith("access_token="));
   return match ? match.split("=").slice(1).join("=") : null;
 }
 
@@ -29,6 +27,12 @@ function decodeJwtPayload(token: string): { role?: string } | null {
     return null;
   }
 }
+
+const HIGHLIGHTS = [
+  "Semantic resume matching before you ever apply",
+  "Timed scenario tests that AI polish can't fake",
+  "One real-time pipeline channel — no more email black holes",
+];
 
 export default function LoginPage() {
   const { reloadUser } = useAuth();
@@ -81,77 +85,83 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col">
-      <header className="flex items-center justify-between px-6 py-5">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-primary" />
-          <span className="text-lg font-bold tracking-tight">HireIQ</span>
-        </Link>
-        <ThemeToggle />
-      </header>
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <AuthHeader mode="login" />
 
-      <div className="flex flex-1 items-center justify-center px-4 pb-16">
-        <div className="w-full max-w-md space-y-6 rounded-2xl border border-border bg-card p-8 shadow-sm">
-          <div className="text-center">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              Sign in to your account
-            </h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Welcome back — pick up right where you left off.
-            </p>
+      <div className="grid flex-1 overflow-hidden lg:grid-cols-2">
+        {/* Brand column — LEFT on login. Theme-aware: uses card/foreground
+            tokens instead of hardcoded slate, so it responds to the toggle. */}
+        <div className="relative order-1 hidden overflow-hidden bg-background lg:flex lg:flex-col lg:justify-between lg:p-10">
+          <div
+            aria-hidden
+            className="pointer-events-none absolute inset-0 bg-linear-to-br from-primary/10 via-transparent to-transparent"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -top-24 -left-24 h-96 w-96 rounded-full bg-primary/20 blur-3xl"
+          />
+          <span />
+          <div className="relative z-10 max-w-md animate-auth-panel-left">
+            <h2 className="text-3xl font-bold leading-tight text-foreground">
+              A resume can be written by ChatGPT.
+              <br />
+              <span className="text-primary">A timed, live scenario can't.</span>
+            </h2>
+            <ul className="mt-8 space-y-3">
+              {HIGHLIGHTS.map((h) => (
+                <li key={h} className="flex items-start gap-2.5 text-sm text-muted-foreground">
+                  <CheckCircle2 size={16} className="mt-0.5 shrink-0 text-primary" />
+                  {h}
+                </li>
+              ))}
+            </ul>
           </div>
-
-          {error && (
-            <div className="rounded-lg border border-danger-border bg-danger-bg px-4 py-2.5 text-sm text-danger-foreground">
-              {error}
-            </div>
-          )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <Field label="Email address" htmlFor="email" required>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-              />
-            </Field>
-
-            <Field label="Password" htmlFor="password" required>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                placeholder="••••••••"
-              />
-            </Field>
-
-            <Button type="submit" loading={loading} className="w-full">
-              Sign in
-            </Button>
-          </form>
-
-          <p className="text-center text-sm text-muted-foreground">
-            Don't have an account?{" "}
-            <Link href="/auth/register" className="font-medium text-primary hover:text-primary-hover transition-colors">
-              Sign up
-            </Link>
+          <p className="relative z-10 text-xs text-muted-foreground">
+            AI-native hiring — built for people who ship products, not just features.
           </p>
+        </div>
 
-          <div className="relative py-2">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-card px-2 text-muted-foreground">Or continue with</span>
+        {/* Form column — RIGHT on login, the only scrollable element */}
+        <div className="order-2 flex flex-col overflow-y-auto scrollbar-none">
+          <div className="flex flex-1 items-center justify-center px-4 py-8">
+            <div className="w-full max-w-sm animate-auth-content space-y-6">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">Sign in to your account</h1>
+                <p className="mt-2 text-sm text-muted-foreground">Welcome back — pick up right where you left off.</p>
+              </div>
+
+              {error && (
+                <div className="rounded-lg border border-danger-border bg-danger-bg px-4 py-2.5 text-sm text-danger-foreground">
+                  {error}
+                </div>
+              )}
+
+              <OAuthButtons mode="login" />
+
+              <div className="relative py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-border" />
+                </div>
+                <div className="relative flex justify-center text-xs">
+                  <span className="bg-background px-2 text-muted-foreground">Or continue with email</span>
+                </div>
+              </div>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <Field label="Email address" htmlFor="email" required>
+                  <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="you@example.com" />
+                </Field>
+
+                <Field label="Password" htmlFor="password" required>
+                  <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required placeholder="••••••••" />
+                </Field>
+
+                <Button type="submit" loading={loading} className="w-full">
+                  Sign in
+                </Button>
+              </form>
             </div>
           </div>
-
-          <OAuthButtons mode="login" />
         </div>
       </div>
     </div>

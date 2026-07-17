@@ -13,3 +13,4 @@ export { Skeleton, SkeletonText, SkeletonCard } from "./Skeleton";
 export { ToastProvider, useToast } from "./Toast";
 export { default as ThemeToggle } from "./ThemeToggle";
 export { default as PageHeader } from "./PageHeader";
+export { default as StatusBadge } from "./StatusBadge";

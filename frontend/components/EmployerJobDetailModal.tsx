@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Briefcase, MapPin, Users, Sparkles } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { SlideOver, Button, StatusBadge, Skeleton, SkeletonText } from "@/components/ui";
 import ExtractionDetailModal from "@/components/ExtractionDetailModal";
 
 interface JobDetail {
@@ -83,98 +85,116 @@ export default function EmployerJobDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-6">
-        {loading && <p className="text-sm text-gray-400 animate-pulse">Loading…</p>}
-        {loadError && <p className="text-sm text-red-500">{loadError}</p>}
+    <>
+      <SlideOver
+        open
+        onClose={onClose}
+        title={loading ? "Loading…" : detail?.title}
+        width="lg"
+      >
+        {loading && (
+          <div className="space-y-4">
+            <Skeleton className="h-4 w-1/3" />
+            <SkeletonText lines={4} />
+          </div>
+        )}
+        {loadError && <p className="text-sm text-danger">{loadError}</p>}
 
         {detail && (
-          <>
-            <div className="flex justify-between items-start mb-1">
-              <h2 className="text-lg font-bold text-gray-900">{detail.title}</h2>
-              <StatusBadge status={detail.status} />
-            </div>
-            <p className="text-sm text-gray-500 mb-3">
-              {[detail.location, detail.work_mode, detail.job_level].filter(Boolean).join(" · ")}
-              {" · "}{detail.hiring_count} open position{detail.hiring_count !== 1 ? "s" : ""}
-            </p>
-
-            {(detail.salary_min || detail.salary_max) && (
-              <p className="text-sm text-gray-500 mb-3">
-                {detail.salary_min && detail.salary_max
-                  ? `₹${detail.salary_min.toLocaleString()} – ₹${detail.salary_max.toLocaleString()}`
-                  : detail.salary_min ? `From ₹${detail.salary_min.toLocaleString()}` : `Up to ₹${detail.salary_max!.toLocaleString()}`}
-              </p>
-            )}
-
-            {detail.categories && detail.categories.length > 0 && (
-              <div className="flex gap-1.5 mb-3 flex-wrap">
-                {detail.categories.map((c) => (
-                  <span key={c} className="text-xs bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full capitalize">
-                    {c.replace(/_/g, " ")}
+          <div className="space-y-6">
+            <div>
+              <div className="mb-2 flex items-center gap-2">
+                <StatusBadge status={detail.status} />
+                {detail.scenario_enabled && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+                    <Sparkles size={11} /> Scenario question
                   </span>
-                ))}
+                )}
               </div>
-            )}
-
-            <div className="border-t border-gray-100 pt-4 mb-4">
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{detail.description}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+                {detail.location && (
+                  <span className="flex items-center gap-1.5"><MapPin size={13} /> {detail.location}</span>
+                )}
+                {detail.work_mode && (
+                  <span className="capitalize flex items-center gap-1.5"><Briefcase size={13} /> {detail.work_mode}</span>
+                )}
+                <span className="flex items-center gap-1.5">
+                  <Users size={13} /> {detail.hiring_count} open position{detail.hiring_count !== 1 ? "s" : ""}
+                </span>
+              </div>
+              {(detail.salary_min || detail.salary_max) && (
+                <p className="mt-2 text-sm font-medium text-foreground">
+                  {detail.salary_min && detail.salary_max
+                    ? `₹${detail.salary_min.toLocaleString()} – ₹${detail.salary_max.toLocaleString()}`
+                    : detail.salary_min ? `From ₹${detail.salary_min.toLocaleString()}` : `Up to ₹${detail.salary_max!.toLocaleString()}`}
+                </p>
+              )}
+              {detail.categories && detail.categories.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {detail.categories.map((c) => (
+                    <span key={c} className="rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium capitalize text-primary">
+                      {c.replace(/_/g, " ")}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {/* Scenario status — no content shown, generated lazily at apply-time */}
-            <div className="border-t border-gray-100 pt-4 mb-4">
+            <div className="border-t border-border pt-5">
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{detail.description}</p>
+            </div>
+
+            <div className="rounded-xl border border-border bg-muted/40 p-4">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scenario question</p>
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  detail.scenario_enabled ? "bg-teal-100 text-teal-700" : "bg-gray-100 text-gray-500"
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Scenario question</p>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  detail.scenario_enabled ? "bg-success-bg text-success-foreground" : "bg-muted text-muted-foreground"
                 }`}>
                   {detail.scenario_enabled ? "Enabled" : "Disabled"}
                 </span>
               </div>
               {detail.scenario_enabled && (
-                <p className="text-xs text-gray-400 mt-1.5">
-                  Generated automatically for the first applicant. Content isn't shown here to keep
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Generated automatically for the first applicant — content isn't shown here to keep
                   it consistent across candidates.
                 </p>
               )}
             </div>
 
-            <div className="border-t border-gray-100 pt-4 flex flex-wrap gap-2">
-              <button onClick={() => onViewApplicants(detail.id)} className="text-xs bg-gray-50 hover:bg-gray-100 border border-gray-200 text-gray-700 px-3.5 py-2 rounded-xl font-semibold transition-colors">
-                View Applicants
-              </button>
+            <div className="flex flex-wrap gap-2 border-t border-border pt-5">
+              <Button variant="outline" size="sm" onClick={() => onViewApplicants(detail.id)}>
+                View applicants
+              </Button>
 
               {detail.status === "draft" && (
-                <button onClick={() => runAction(() => onPublish(detail.id))} disabled={actionBusy} className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50">
-                  {actionBusy ? "Publishing…" : "Publish"}
-                </button>
+                <Button size="sm" loading={actionBusy} onClick={() => runAction(() => onPublish(detail.id))}>
+                  Publish
+                </Button>
               )}
 
               {detail.status === "published" && (
                 <>
-                  <button onClick={() => runAction(() => onReprocess(detail.id))} disabled={actionBusy} className="text-xs bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
+                  <Button variant="outline" size="sm" loading={actionBusy} onClick={() => runAction(() => onReprocess(detail.id))}>
                     Re-analyze JD
-                  </button>
-                  <button onClick={loadAnalysis} disabled={analysisLoading} className="text-xs bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
-                    {analysisLoading ? "Loading…" : "View analysis"}
-                  </button>
-                  <button onClick={() => runAction(() => onCloseJob(detail.id))} disabled={actionBusy} className="text-xs bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-700 px-3.5 py-2 rounded-xl font-semibold transition-colors disabled:opacity-50">
+                  </Button>
+                  <Button variant="outline" size="sm" loading={analysisLoading} onClick={loadAnalysis}>
+                    View analysis
+                  </Button>
+                  <Button variant="destructive" size="sm" loading={actionBusy} onClick={() => runAction(() => onCloseJob(detail.id))}>
                     Close
-                  </button>
+                  </Button>
                 </>
               )}
 
               {detail.status === "closed" && (
-                <button onClick={() => runAction(() => onPublish(detail.id))} disabled={actionBusy} className="text-xs bg-emerald-600 text-white px-3.5 py-2 rounded-xl font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-50">
+                <Button size="sm" loading={actionBusy} onClick={() => runAction(() => onPublish(detail.id))}>
                   Reopen
-                </button>
+                </Button>
               )}
             </div>
-          </>
+          </div>
         )}
-
-        <button onClick={onClose} className="mt-4 text-xs text-gray-400 hover:text-gray-600 w-full text-center">Close</button>
-      </div>
+      </SlideOver>
 
       {showAnalysis && analysis && (
         <ExtractionDetailModal
@@ -185,21 +205,6 @@ export default function EmployerJobDetailModal({
           onClose={() => setShowAnalysis(false)}
         />
       )}
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const s = status?.toLowerCase() || "draft";
-  const styles: Record<string, string> = {
-    draft: "bg-gray-100 text-gray-700 border-gray-200",
-    published: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    paused: "bg-amber-50 text-amber-700 border-amber-200",
-    closed: "bg-rose-50 text-rose-700 border-rose-200",
-  };
-  return (
-    <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold border capitalize ${styles[s] ?? styles.draft}`}>
-      {status}
-    </span>
+    </>
   );
 }
