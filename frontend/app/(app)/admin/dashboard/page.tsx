@@ -1,133 +1,99 @@
-import { cookies } from "next/headers";
+"use client";
+
 import Link from "next/link";
+import { ShieldCheck, Mail, Fingerprint, Clock } from "lucide-react";
+import { RoleGuard } from "@/components/RoleGuard";
+import { useAuth } from "@/context/auth";
+import { Card, CardContent } from "@/components/ui/Card";
+import PageHeader from "@/components/ui/PageHeader";
 
-type UserRole = 'admin' | 'candidate' | 'employer';
-
-interface JWTPayload {
-  sub: string;         // Internal database User ID
-  role: UserRole;
-  email: string;
-  full_name: string;   
-  type: 'access';
-  exp: number;
+export default function AdminDashboard() {
+  return (
+    <RoleGuard allowed={["admin"]}>
+      <DashboardContent />
+    </RoleGuard>
+  );
 }
 
-function decodeJwtPayload(token: string): JWTPayload | null {
-  try {
-    let b64 = token.split(".")[1];
-    if (!b64) return null;
-    b64 = b64.replace(/-/g, "+").replace(/_/g, "/");
-    while (b64.length % 4) b64 += "=";
-    
-    // Server-safe native Node decoding
-    return JSON.parse(Buffer.from(b64, "base64").toString("utf8")) as JWTPayload;
-  } catch {
-    return null;
-  }
-}
-
-// Converted to async Server Component
-export default async function AdminDashboard() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("access_token")?.value || "";
-
-  const tokenData = decodeJwtPayload(token);
-
-  // Fallback protection check if a user sneaks past middleware without admin claims
-  if (!tokenData || tokenData.role !== 'admin') {
-    return (
-      <div className="min-h-screen bg-slate-900 text-slate-100 p-8 flex flex-col items-center justify-center">
-        <p className="text-red-400 font-medium mb-4">Access Denied. Insufficient administrative privileges.</p>
-        <Link href="/auth/login" className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow hover:bg-blue-500 transition-colors">
-          Return to Login
-        </Link>
-      </div>
-    );
-  }
+function DashboardContent() {
+  const { user } = useAuth();
+  if (!user) return null;
 
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-100 p-8">
-      {/* Top Navigation Bar */}
-      <header className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-800 pb-6 mb-8 gap-4">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Admin Control Center</h1>
-          <p className="text-slate-400 mt-1">Welcome back, {tokenData.full_name}</p>
+    <div className="max-w-4xl mx-auto">
+      <PageHeader
+        title="Admin Control Center"
+        description={`Signed in as ${user.full_name}`}
+      />
+
+      <div className="p-6 space-y-6">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <InfoCard icon={ShieldCheck} label="Role" value={user.role} capitalize />
+          <InfoCard icon={Mail} label="Signed in as" value={user.full_name} />
+          <InfoCard
+            icon={Clock}
+            label="Session expires"
+            value={new Date(user.exp * 1000).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          />
         </div>
-      </header>
 
-      {/* Main Grid Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
-        {/* Panel 1: User Profile Metadata */}
-        <section className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl lg:col-span-1">
-          <h2 className="text-xl font-semibold mb-4 text-emerald-400 flex items-center gap-2">
-            <span>👤</span> Identity Claims
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Admin Name</label>
-              <p className="text-lg font-medium">{tokenData.full_name}</p>
+        <Card className="p-6">
+          <CardContent className="p-0 flex items-start gap-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <Fingerprint size={18} />
             </div>
             <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Email Address</label>
-              <p className="text-lg font-medium break-all">{tokenData.email}</p>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Assigned Security Role</label>
-              <span className="inline-block mt-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 capitalize">
-                {tokenData.role}
-              </span>
-            </div>
-          </div>
-        </section>
-
-        {/* Panel 2: Token Lifecycle and Specs */}
-        <section className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl lg:col-span-1">
-          <h2 className="text-xl font-semibold mb-4 text-blue-400 flex items-center gap-2">
-            <span>🔑</span> Token Lifecycle
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Unique User ID (sub)</label>
-              <code className="text-sm font-mono block bg-slate-900/50 p-2 rounded mt-1 border border-slate-700/50 break-all">
-                {tokenData.sub}
-              </code>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Token Expiration (Unix Epoch)</label>
-              <p className="text-lg font-medium font-mono">{tokenData.exp}</p>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block">Readable Expiry Date</label>
-              <p className="text-sm font-medium text-slate-300">
-                {new Date(tokenData.exp * 1000).toLocaleString()}
+              <h3 className="font-semibold text-foreground mb-1">Platform analytics</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Org verification queue, token-usage-by-org, and platform-wide pipeline stats need
+                a dedicated backend aggregate endpoint before they can be shown here — flagged in{" "}
+                <code className="text-xs bg-muted px-1 py-0.5 rounded">TODO.md</code> for the
+                backend agent. This page will grow real stat cards once that's available.
               </p>
             </div>
-          </div>
-        </section>
+          </CardContent>
+        </Card>
 
-        {/* Panel 3: Complete Decoded JSON Object Payload */}
-        <section className="bg-slate-800 rounded-xl p-6 border border-slate-700 shadow-xl lg:col-span-3">
-          <h2 className="text-xl font-semibold mb-4 text-purple-400 flex items-center gap-2">
-            <span>📦</span> Complete Raw JWT Payload Debugger
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block mb-2">Decoded JSON Object</label>
-              <pre className="text-xs font-mono bg-slate-950 p-4 rounded-lg overflow-x-auto text-purple-300 border border-slate-800 max-h-64 leading-relaxed">
-                {JSON.stringify(tokenData, null, 2)}
-              </pre>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 uppercase tracking-wider block mb-2">Stringified Bearer Hash Reference</label>
-              <p className="text-xs font-mono bg-slate-950 p-3 rounded-lg text-slate-500 truncate select-all">
-                {token}
-              </p>
-            </div>
-          </div>
-        </section>
-
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Link href="/admin/users">
+            <Card interactive className="p-6 h-full">
+              <CardContent className="p-0">
+                <h3 className="font-semibold text-foreground">Users</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Manage employers, candidates, and flagged accounts
+                </p>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
       </div>
     </div>
+  );
+}
+
+function InfoCard({
+  icon: Icon,
+  label,
+  value,
+  capitalize,
+}: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+  capitalize?: boolean;
+}) {
+  return (
+    <Card className="p-5">
+      <CardContent className="p-0">
+        <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon size={15} />
+        </div>
+        <p className={`text-sm font-semibold text-foreground ${capitalize ? "capitalize" : ""}`}>{value}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </CardContent>
+    </Card>
   );
 }

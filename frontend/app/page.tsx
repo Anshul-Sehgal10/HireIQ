@@ -59,7 +59,7 @@ export default function Home() {
           aria-hidden="true"
           className="pointer-events-none absolute inset-x-0 -top-40 -z-10 flex justify-center"
         >
-          <div className="h-[480px] w-[480px] rounded-full bg-primary/10 blur-3xl" />
+          <div className="h-120 w-120 rounded-full bg-primary/10 blur-3xl" />
         </div>
 
         <div className="mx-auto grid max-w-6xl gap-12 px-6 py-20 md:grid-cols-2 md:py-28">

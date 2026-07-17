@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
+import { Card, CardContent } from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
 
 interface Overview {
   has_resume: boolean;
@@ -44,6 +47,20 @@ const STATUS_LABELS: Record<string, string> = {
   offer: "Offer",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+};
+
+const STATUS_VARIANT: Record<string, "default" | "success" | "warning" | "danger" | "primary"> = {
+  pending: "default",
+  resume_rejected: "danger",
+  resume_passed: "primary",
+  scenario_pending: "warning",
+  scenario_submitted: "primary",
+  shortlisted: "success",
+  assessment: "primary",
+  interview: "primary",
+  offer: "success",
+  rejected: "danger",
+  withdrawn: "default",
 };
 
 export default function CandidateDashboardPage() {
@@ -118,49 +135,48 @@ function DashboardContent() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="p-8 text-gray-400 text-sm animate-pulse">Loading dashboard…</div>
-    );
-  }
-
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
       <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-        <Link href="/candidate/jobs" className="text-sm text-blue-600 hover:text-blue-700">
+        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+        <Link href="/candidate/jobs" className="text-sm text-primary hover:text-primary-hover">
           Browse jobs →
         </Link>
       </div>
 
-      {overview && (
+      {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Applications" value={overview.total_applications} />
-          <StatCard
-            label="Shortlisted"
-            value={overview.status_counts["shortlisted"] ?? 0}
-          />
-          <StatCard
-            label="In progress"
-            value={
-              (overview.status_counts["scenario_pending"] ?? 0) +
-              (overview.status_counts["resume_passed"] ?? 0) +
-              (overview.status_counts["scenario_submitted"] ?? 0)
-            }
-          />
-          <StatCard
-            label="Overrides left"
-            value={
-              overview.overrides_unlimited
-                ? "Unlimited"
-                : `${overview.overrides_remaining}/${overview.override_apps_limit}`
-            }
-          />
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
+      ) : (
+        overview && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <StatCard label="Applications" value={overview.total_applications} />
+            <StatCard label="Shortlisted" value={overview.status_counts["shortlisted"] ?? 0} />
+            <StatCard
+              label="In progress"
+              value={
+                (overview.status_counts["scenario_pending"] ?? 0) +
+                (overview.status_counts["resume_passed"] ?? 0) +
+                (overview.status_counts["scenario_submitted"] ?? 0)
+              }
+            />
+            <StatCard
+              label="Overrides left"
+              value={
+                overview.overrides_unlimited
+                  ? "Unlimited"
+                  : `${overview.overrides_remaining}/${overview.override_apps_limit}`
+              }
+            />
+          </div>
+        )
       )}
 
-      {overview && !overview.has_resume && (
-        <div className="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+      {!loading && overview && !overview.has_resume && (
+        <div className="bg-warning-bg border border-warning-border text-warning-foreground px-4 py-3 rounded-lg text-sm">
           You haven't uploaded a resume yet.{" "}
           <Link href="/candidate/resumes" className="underline font-medium">
             Upload one
@@ -170,46 +186,50 @@ function DashboardContent() {
       )}
 
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-3">Your applications</h2>
+        <h2 className="text-lg font-semibold text-foreground mb-3">Your applications</h2>
 
-        {applications.length === 0 && (
-          <p className="text-gray-400 text-sm py-8 text-center">
-            You haven't applied to any jobs yet.
-          </p>
+        {loading && (
+          <Card className="p-5">
+            <SkeletonText lines={3} />
+          </Card>
+        )}
+
+        {!loading && applications.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground text-sm mb-3">You haven't applied to any jobs yet.</p>
+            <Link href="/candidate/jobs" className="text-sm text-primary hover:text-primary-hover font-medium">
+              Browse the job feed →
+            </Link>
+          </div>
         )}
 
         <div className="space-y-3">
           {applications.map((app) => (
-            <div
-              key={app.id}
-              className="border border-gray-200 rounded-xl p-4 bg-white flex flex-col gap-2"
-            >
+            <Card key={app.id} className="p-4 flex flex-col gap-2">
               <div className="flex justify-between items-start gap-4">
                 <div>
-                  <p className="font-medium text-gray-900">{app.job_title}</p>
-                  <p className="text-xs text-gray-500">{app.org_name}</p>
+                  <p className="font-medium text-foreground">{app.job_title}</p>
+                  <p className="text-xs text-muted-foreground">{app.org_name}</p>
                 </div>
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-gray-100 text-gray-700 shrink-0">
+                <Badge variant={STATUS_VARIANT[app.status] ?? "default"} className="shrink-0">
                   {STATUS_LABELS[app.status] ?? app.status}
-                </span>
+                </Badge>
               </div>
 
-              <div className="flex flex-wrap gap-4 text-xs text-gray-500">
-                {app.match_score != null && (
-                  <span>Resume match: {Math.round(app.match_score * 100)}%</span>
-                )}
+              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                {app.match_score != null && <span>Resume match: {Math.round(app.match_score * 100)}%</span>}
                 {app.scenario_enabled && app.scenario_score != null && (
                   <span>
                     Scenario score: {Math.round(app.scenario_score * 100)}%
                     {app.scenario_meets_threshold === false && " (below bar)"}
                   </span>
                 )}
-                {app.is_override && <span className="text-amber-600">Used override</span>}
+                {app.is_override && <span className="text-warning">Used override</span>}
                 <span>Applied {new Date(app.applied_at).toLocaleDateString()}</span>
               </div>
 
               {app.scenario_ai_summary && (
-                <p className="text-xs text-gray-600 mt-1">{app.scenario_ai_summary}</p>
+                <p className="text-xs text-muted-foreground mt-1">{app.scenario_ai_summary}</p>
               )}
 
               {app.status === "scenario_pending" && app.scenario_meets_threshold === false && (
@@ -218,7 +238,7 @@ function DashboardContent() {
                     <button
                       onClick={() => useOverride(app.id)}
                       disabled={busyId === app.id}
-                      className="text-xs bg-amber-600 hover:bg-amber-500 text-white px-3 py-1.5 rounded-lg disabled:opacity-50"
+                      className="text-xs bg-warning text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:brightness-110 transition-all"
                     >
                       {busyId === app.id ? "Submitting…" : "Use override & submit"}
                     </button>
@@ -226,14 +246,14 @@ function DashboardContent() {
                     <button
                       onClick={() => withdraw(app.id)}
                       disabled={busyId === app.id}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg disabled:opacity-50"
+                      className="text-xs bg-muted hover:bg-border text-foreground px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
                     >
                       Withdraw application
                     </button>
                   )}
                 </div>
               )}
-            </div>
+            </Card>
           ))}
         </div>
       </div>
@@ -243,9 +263,11 @@ function DashboardContent() {
 
 function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="border border-gray-200 rounded-xl p-4 bg-white">
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs text-gray-500 mt-0.5">{label}</p>
-    </div>
+    <Card className="p-4">
+      <CardContent className="p-0">
+        <p className="text-2xl font-bold text-foreground">{value}</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+      </CardContent>
+    </Card>
   );
 }
