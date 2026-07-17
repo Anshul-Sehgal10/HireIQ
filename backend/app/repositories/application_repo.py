@@ -77,6 +77,23 @@ async def list_applications_by_job(
     )
     return list(result.all()) #type: ignore
 
+async def list_ranked_for_job(db: AsyncSession, job_id: uuid.UUID) -> List[Application]:
+    """
+    Like list_applications_by_job but eager-loads scenario_response and the
+    candidate's user record via ORM relationships (rather than a manual
+    join+tuple select) — needed so the ranked dashboard can show resume
+    match score and scenario score side by side without N+1 queries.
+    """
+    result = await db.execute(
+        select(Application)
+        .options(
+            joinedload(Application.candidate_profile).joinedload(CandidateProfile.user),
+            joinedload(Application.scenario_response),
+        )
+        .where(Application.job_id == job_id)
+        .order_by(Application.match_score.desc().nulls_last())
+    )
+    return list(result.unique().scalars().all())
 
 # ---------------------------------------------------------------------------
 # Writes

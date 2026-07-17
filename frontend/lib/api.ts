@@ -19,6 +19,7 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
     fetch(apiUrl(path), {
       ...options,
       credentials: "include",
+      cache: "no-store",
       headers: { "Content-Type": "application/json", ...options?.headers },
     });
 
@@ -28,8 +29,9 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
   const refreshRes = await fetch(apiUrl("/auth/refresh"), {
     method: "POST",
     credentials: "include",
+    cache: "no-store",
   });
-  if (!refreshRes.ok) return res; // refresh failed — surface the original 401
+  if (!refreshRes.ok) return res;
 
   return doFetch();
 }
