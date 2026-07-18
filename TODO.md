@@ -6,7 +6,7 @@ Division of labor clarification (per user instruction): the backend agent
 owns all business logic and page creation, including functional frontend
 pages that call new APIs. The frontend agent's role is visual redesign of
 existing pages only — no new pages, no new business logic, no guessing at
-requirements. TODO.md is not edited directly by either agent going forward;
+requirements. TODO.md is not edited directly by either agent;
 each agent gives the user the content to paste in.
 
 ## My Todos
@@ -22,8 +22,6 @@ The Todos for the user, ai model ignore this section
 
 Backend agent fix these bugs, Frontend agents report backend bugs here:
 
-- [ ] Can't apply for job until scenario (if enabled) is completed
-
 ### Frontend
 
 Frontend agent fix these bugs, Backend agents report frontend bugs here:
@@ -37,7 +35,7 @@ Frontend agent fix these bugs, Backend agents report frontend bugs here:
 Backend agent implement these features, Frontend agents report backend features here:
 
 - [Later] Local user → can link a Google/LinkedIn account
-- [We brainstorm later] run splade search on both resume and jd, then get the top matching keywords, send them to ai and get the score
+- [ ] Can't apply for job until scenario (if enabled) is completed
 - [ ] Admin platform-analytics endpoint — needed to build out the real Admin
       Control Center per the PRD (org verification queue, token usage by org,
       platform-wide pipeline funnel, rejection rates). No aggregate admin
