@@ -3,8 +3,21 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import { ArrowLeft, Send, Users, MessagesSquare, Layers } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
+import {
+  PageHeader,
+  Card,
+  CardContent,
+  Button,
+  Select,
+  Textarea,
+  StatusBadge,
+  MatchScoreRing,
+  SkeletonText,
+  useToast,
+} from "@/components/ui";
 
 interface RankedCandidate {
   application_id: string;
@@ -50,13 +63,13 @@ export default function EmployerPipelinePage() {
 
 function Content() {
   const { jobId } = useParams<{ jobId: string }>();
+  const { toast } = useToast();
 
   const [jobTitle, setJobTitle] = useState("");
   const [candidates, setCandidates] = useState<RankedCandidate[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const [stage, setStage] = useState("shortlisted");
@@ -69,7 +82,6 @@ function Content() {
 
   const loadAll = async () => {
     setLoading(true);
-    setError(null);
     try {
       const [jobRes, rankedRes, membersRes, messagesRes] = await Promise.all([
         apiFetch(`/jobs/${jobId}`),
@@ -82,7 +94,7 @@ function Content() {
       if (membersRes.ok) setMembers(await membersRes.json());
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      setError(e.message);
+      toast({ title: "Failed to load pipeline", description: e.message, variant: "error" });
     } finally {
       setLoading(false);
     }
@@ -101,9 +113,10 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to shortlist");
       }
+      toast({ title: "Candidate shortlisted", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      alert(e.message);
+      toast({ title: "Failed to shortlist", description: e.message, variant: "error" });
     } finally {
       setBusyId(null);
     }
@@ -118,9 +131,10 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to reject");
       }
+      toast({ title: "Candidate rejected", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      alert(e.message);
+      toast({ title: "Failed to reject", description: e.message, variant: "error" });
     } finally {
       setBusyId(null);
     }
@@ -137,9 +151,10 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to advance stage");
       }
+      toast({ title: `Pipeline advanced to ${stage.replace(/_/g, " ")}`, variant: "success" });
       await loadAll();
     } catch (e: any) {
-      alert(e.message);
+      toast({ title: "Failed to advance stage", description: e.message, variant: "error" });
     } finally {
       setAdvancing(false);
     }
@@ -148,7 +163,7 @@ function Content() {
   const sendMessage = async () => {
     if (!content.trim()) return;
     if (msgType === "direct" && !recipientId) {
-      alert("Select a recipient for a direct message");
+      toast({ title: "Select a recipient for a direct message", variant: "error" });
       return;
     }
     setSending(true);
@@ -167,185 +182,236 @@ function Content() {
       const messagesRes = await apiFetch(`/jobs/${jobId}/pipeline/messages`);
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      alert(e.message);
+      toast({ title: "Failed to send message", description: e.message, variant: "error" });
     } finally {
       setSending(false);
     }
   };
 
-  if (loading) return <p className="p-8 text-sm text-muted-foreground animate-pulse">Loading pipeline…</p>;
-
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8">
-      <div>
-        <Link href="/employer/jobs" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to job postings
-        </Link>
-        <h1 className="text-2xl font-semibold text-foreground mt-2">Pipeline: {jobTitle}</h1>
-      </div>
-
-      {error && <p className="text-sm text-danger">{error}</p>}
-
-      {/* Ranked candidates */}
-      <section className="border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Ranked candidates
-        </h2>
-        {candidates.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No applications yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground border-b border-border">
-                  <th className="py-2 pr-4">Candidate</th>
-                  <th className="py-2 pr-4">Status</th>
-                  <th className="py-2 pr-4">Match</th>
-                  <th className="py-2 pr-4">Scenario</th>
-                  <th className="py-2 pr-4">Pipeline</th>
-                  <th className="py-2 pr-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {candidates.map((c) => (
-                  <tr key={c.application_id} className="border-b border-border last:border-0">
-                    <td className="py-2 pr-4">
-                      <p className="font-medium text-foreground">{c.candidate_name}</p>
-                      <p className="text-xs text-muted-foreground">{c.candidate_email}</p>
-                    </td>
-                    <td className="py-2 pr-4 capitalize">{c.status.replace(/_/g, " ")}</td>
-                    <td className="py-2 pr-4">{c.match_score != null ? `${Math.round(c.match_score * 100)}%` : "—"}</td>
-                    <td className="py-2 pr-4">{c.scenario_score != null ? `${Math.round(c.scenario_score * 100)}%` : "—"}</td>
-                    <td className="py-2 pr-4">{c.in_pipeline ? "Yes" : "No"}</td>
-                    <td className="py-2 pr-4 space-x-2 whitespace-nowrap">
-                      <button
-                        onClick={() => shortlist(c.application_id)}
-                        disabled={busyId === c.application_id || c.in_pipeline}
-                        className="text-xs bg-success text-white px-2.5 py-1 rounded-lg disabled:opacity-40"
-                      >
-                        Shortlist
-                      </button>
-                      <button
-                        onClick={() => reject(c.application_id)}
-                        disabled={busyId === c.application_id || c.status === "rejected"}
-                        className="text-xs bg-danger text-white px-2.5 py-1 rounded-lg disabled:opacity-40"
-                      >
-                        Reject
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Stage control */}
-      <section className="border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Pipeline stage
-        </h2>
-        <div className="flex items-center gap-2">
-          <select
-            value={stage}
-            onChange={(e) => setStage(e.target.value)}
-            className="border border-input rounded-lg px-3 py-1.5 text-sm bg-card text-foreground"
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title={loading ? "Pipeline" : `Pipeline: ${jobTitle}`}
+        actions={
+          <Link
+            href="/employer/jobs"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            {STAGES.map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-          <button
-            onClick={advanceStage}
-            disabled={advancing}
-            className="text-sm bg-primary text-primary-foreground px-3 py-1.5 rounded-lg disabled:opacity-50"
-          >
-            {advancing ? "Advancing…" : "Advance all active members to this stage"}
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          Moves every active pipeline member's application status and posts a system message. Rejected/withdrawn candidates are skipped.
-        </p>
-      </section>
+            <ArrowLeft size={14} />
+            Back to job postings
+          </Link>
+        }
+      />
 
-      {/* Members */}
-      <section className="border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Active members ({members.length})
-        </h2>
-        {members.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No one has been shortlisted yet.</p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {members.map((m) => (
-              <li key={m.id} className="text-foreground">
-                {m.candidate_name} <span className="text-muted-foreground">({m.candidate_email})</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* Messages */}
-      <section className="border border-border rounded-xl p-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-          Channel messages
-        </h2>
-        <div className="space-y-2 max-h-72 overflow-y-auto mb-4 border border-border rounded-lg p-3 bg-muted/30">
-          {messages.length === 0 && <p className="text-sm text-muted-foreground">No messages yet.</p>}
-          {messages.map((m) => (
-            <div key={m.id} className="text-sm">
-              <span className="text-xs uppercase text-muted-foreground mr-2">[{m.message_type}]</span>
-              {m.content}
-              <span className="text-xs text-muted-foreground ml-2">
-                {new Date(m.sent_at).toLocaleString()}
-              </span>
+      <div className="space-y-6 p-6">
+        {/* Ranked candidates */}
+        <Card className="p-5">
+          <CardContent className="p-0">
+            <div className="mb-4 flex items-center gap-2">
+              <Users size={15} className="text-primary" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Ranked candidates
+              </h2>
             </div>
-          ))}
-        </div>
 
-        <div className="space-y-2">
-          <div className="flex gap-2">
-            <select
-              value={msgType}
-              onChange={(e) => setMsgType(e.target.value as "broadcast" | "direct")}
-              className="border border-input rounded-lg px-2.5 py-1.5 text-sm bg-card text-foreground"
-            >
-              <option value="broadcast">Broadcast (all members)</option>
-              <option value="direct">Direct</option>
-            </select>
-            {msgType === "direct" && (
-              <select
-                value={recipientId}
-                onChange={(e) => setRecipientId(e.target.value)}
-                className="border border-input rounded-lg px-2.5 py-1.5 text-sm bg-card text-foreground flex-1"
-              >
-                <option value="">Select recipient…</option>
-                {members.map((m) => (
-                  <option key={m.application_id} value={m.application_id}>
-                    {m.candidate_name}
-                  </option>
-                ))}
-              </select>
+            {loading ? (
+              <SkeletonText lines={4} />
+            ) : candidates.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No applications yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                      <th className="py-2 pr-4 font-medium">Candidate</th>
+                      <th className="py-2 pr-4 font-medium">Status</th>
+                      <th className="py-2 pr-4 font-medium">Match</th>
+                      <th className="py-2 pr-4 font-medium">Scenario</th>
+                      <th className="py-2 pr-4 font-medium">Pipeline</th>
+                      <th className="py-2 pr-4 font-medium">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {candidates.map((c) => (
+                      <tr key={c.application_id} className="border-b border-border last:border-0">
+                        <td className="py-3 pr-4">
+                          <p className="font-medium text-foreground">{c.candidate_name}</p>
+                          <p className="text-xs text-muted-foreground">{c.candidate_email}</p>
+                        </td>
+                        <td className="py-3 pr-4">
+                          <StatusBadge status={c.status} />
+                        </td>
+                        <td className="py-3 pr-4">
+                          {c.match_score != null ? (
+                            <MatchScoreRing score={c.match_score} size="sm" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          {c.scenario_score != null ? (
+                            <MatchScoreRing score={c.scenario_score} size="sm" />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4 text-xs text-muted-foreground">
+                          {c.in_pipeline ? "Yes" : "No"}
+                        </td>
+                        <td className="py-3 pr-4">
+                          <div className="flex flex-wrap gap-1.5">
+                            <Button
+                              size="sm"
+                              loading={busyId === c.application_id}
+                              disabled={c.in_pipeline}
+                              onClick={() => shortlist(c.application_id)}
+                            >
+                              Shortlist
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              loading={busyId === c.application_id}
+                              disabled={c.status === "rejected"}
+                              onClick={() => reject(c.application_id)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </div>
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            placeholder="Message content…"
-            rows={2}
-            className="w-full border border-input rounded-lg px-3 py-2 text-sm bg-card text-foreground"
-          />
-          <button
-            onClick={sendMessage}
-            disabled={sending}
-            className="text-sm bg-primary text-primary-foreground px-4 py-2 rounded-lg disabled:opacity-50"
-          >
-            {sending ? "Sending…" : "Send"}
-          </button>
-        </div>
-      </section>
+          </CardContent>
+        </Card>
+
+        {/* Stage control */}
+        <Card className="p-5">
+          <CardContent className="p-0">
+            <div className="mb-4 flex items-center gap-2">
+              <Layers size={15} className="text-primary" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Pipeline stage
+              </h2>
+            </div>
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+              <Select value={stage} onChange={(e) => setStage(e.target.value)} className="sm:w-56">
+                {STAGES.map((s) => (
+                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                ))}
+              </Select>
+              <Button loading={advancing} onClick={advanceStage}>
+                Advance all active members to this stage
+              </Button>
+            </div>
+            <p className="mt-2.5 text-xs text-muted-foreground">
+              Moves every active pipeline member's application status and posts a system message.
+              Rejected/withdrawn candidates are skipped.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Members */}
+        <Card className="p-5">
+          <CardContent className="p-0">
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              Active members ({members.length})
+            </h2>
+            {members.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No one has been shortlisted yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {members.map((m) => (
+                  <li key={m.id} className="flex items-center gap-2.5 text-sm">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
+                      {m.candidate_name?.[0]?.toUpperCase() ?? "?"}
+                    </span>
+                    <span className="text-foreground">{m.candidate_name}</span>
+                    <span className="text-muted-foreground">({m.candidate_email})</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Messages */}
+        <Card className="p-5">
+          <CardContent className="p-0">
+            <div className="mb-4 flex items-center gap-2">
+              <MessagesSquare size={15} className="text-primary" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                Channel messages
+              </h2>
+            </div>
+
+            <div className="mb-4 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3 scrollbar-none">
+              {messages.length === 0 && (
+                <p className="text-sm text-muted-foreground">No messages yet.</p>
+              )}
+              {messages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`rounded-lg px-3 py-2 text-sm ${
+                    m.message_type === "system"
+                      ? "bg-muted text-muted-foreground italic"
+                      : "bg-card text-foreground"
+                  }`}
+                >
+                  <div className="mb-0.5 flex items-center gap-2">
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
+                      {m.message_type}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {new Date(m.sent_at).toLocaleString()}
+                    </span>
+                  </div>
+                  {m.content}
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2.5">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Select
+                  value={msgType}
+                  onChange={(e) => setMsgType(e.target.value as "broadcast" | "direct")}
+                  className="sm:w-56"
+                >
+                  <option value="broadcast">Broadcast (all members)</option>
+                  <option value="direct">Direct</option>
+                </Select>
+                {msgType === "direct" && (
+                  <Select
+                    value={recipientId}
+                    onChange={(e) => setRecipientId(e.target.value)}
+                    className="flex-1"
+                  >
+                    <option value="">Select recipient…</option>
+                    {members.map((m) => (
+                      <option key={m.application_id} value={m.application_id}>
+                        {m.candidate_name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </div>
+              <Textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Message content…"
+                rows={2}
+              />
+              <Button leftIcon={<Send size={13} />} loading={sending} onClick={sendMessage}>
+                Send
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

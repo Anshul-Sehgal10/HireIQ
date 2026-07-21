@@ -10,7 +10,9 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api"
+import { Mail, CheckCircle2, AlertTriangle } from "lucide-react";
+import { apiFetch } from "@/lib/api";
+import { Card, CardContent, Button } from "@/components/ui";
 
 type State = "loading" | "confirm" | "accepting" | "success" | "error";
 
@@ -63,76 +65,75 @@ export default function AcceptInvitePage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex items-center justify-center px-4">
+    <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
       <div className="w-full max-w-md">
         <div className="mb-8">
-          <span className="text-xs font-semibold tracking-widest text-emerald-400 uppercase">
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">
             HireIQ
           </span>
         </div>
 
         {state === "loading" && (
-          <p className="text-slate-400 text-sm animate-pulse">Checking invite…</p>
+          <p className="animate-pulse text-sm text-muted-foreground">Checking invite…</p>
         )}
 
         {state === "confirm" && (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
-            <div className="w-12 h-12 bg-emerald-500/10 border border-emerald-500/20 rounded-xl flex items-center justify-center mb-6">
-              <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <h1 className="text-xl font-bold text-white mb-2">You've been invited</h1>
-            <p className="text-slate-400 text-sm mb-8">
-              You've been invited to join an organisation on HireIQ. Accept to get access to their
-              job postings and hiring pipeline.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={handleAccept}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
-              >
-                Accept invite
-              </button>
-              <button
-                onClick={handleDecline}
-                className="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium py-3 rounded-lg text-sm transition-colors"
-              >
-                Decline
-              </button>
-            </div>
-          </div>
+          <Card className="p-8">
+            <CardContent className="p-0">
+              <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 text-primary">
+                <Mail size={20} />
+              </div>
+              <h1 className="mb-2 text-xl font-bold text-foreground">You've been invited</h1>
+              <p className="mb-8 text-sm text-muted-foreground">
+                You've been invited to join an organisation on HireIQ. Accept to get access to
+                their job postings and hiring pipeline.
+              </p>
+              <div className="flex gap-3">
+                <Button className="flex-1" onClick={handleAccept}>
+                  Accept invite
+                </Button>
+                <Button className="flex-1" variant="secondary" onClick={handleDecline}>
+                  Decline
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {state === "accepting" && (
-          <div className="text-center">
-            <p className="text-slate-400 text-sm animate-pulse">Joining organisation…</p>
-          </div>
+          <p className="animate-pulse text-sm text-muted-foreground">Joining organisation…</p>
         )}
 
         {state === "success" && (
-          <div className="bg-emerald-500/10 border border-emerald-500/25 rounded-2xl p-8 text-center">
-            <div className="w-12 h-12 bg-emerald-500/20 rounded-xl flex items-center justify-center mx-auto mb-4">
-              <svg className="w-6 h-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h2 className="text-white font-bold text-lg mb-1">You're in!</h2>
-            <p className="text-slate-400 text-sm">Redirecting to your workspace…</p>
-          </div>
+          <Card className="border-success-border bg-success-bg p-8 text-center">
+            <CardContent className="p-0">
+              <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-success/15 text-success">
+                <CheckCircle2 size={20} />
+              </div>
+              <h2 className="mb-1 text-lg font-bold text-success-foreground">You're in!</h2>
+              <p className="text-sm text-success-foreground/80">Redirecting to your workspace…</p>
+            </CardContent>
+          </Card>
         )}
 
         {state === "error" && (
-          <div className="bg-red-500/10 border border-red-500/25 rounded-2xl p-8">
-            <h2 className="text-white font-bold text-lg mb-2">Something went wrong</h2>
-            <p className="text-red-400 text-sm mb-6">{errorMsg}</p>
-            <Link
-              href="/employer/dashboard"
-              className="inline-block text-sm text-slate-400 hover:text-white transition-colors"
-            >
-              ← Back to dashboard
-            </Link>
-          </div>
+          <Card className="border-danger-border bg-danger-bg p-8">
+            <CardContent className="p-0">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-danger/15 text-danger">
+                <AlertTriangle size={20} />
+              </div>
+              <h2 className="mb-2 text-lg font-bold text-danger-foreground">
+                Something went wrong
+              </h2>
+              <p className="mb-6 text-sm text-danger-foreground/90">{errorMsg}</p>
+              <Link
+                href="/employer/dashboard"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              >
+                ← Back to dashboard
+              </Link>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

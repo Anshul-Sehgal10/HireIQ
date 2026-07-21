@@ -1,18 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Plus, ArrowLeft, Inbox, ChevronRight } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
 import EmployerJobDetailModal from "@/components/EmployerJobDetailModal";
-import { StatusBadge } from "@/components/ui";
-
-interface JobDetail {
-  id: string;
-  title: string;
-  categories: string[] | null;
-  parsed_data: Record<string, any> | null;
-  has_embedding: boolean;
-}
+import {
+  PageHeader,
+  Card,
+  CardContent,
+  Button,
+  Field,
+  Input,
+  Textarea,
+  Select,
+  StatusBadge,
+  SkeletonCard,
+  SkeletonText,
+  useToast,
+} from "@/components/ui";
 
 interface Job {
   id: string;
@@ -47,7 +53,9 @@ export default function EmployerJobsPage() {
 }
 
 function JobsContent() {
+  const { toast } = useToast();
   const [jobs, setJobs] = useState<Job[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
@@ -61,28 +69,25 @@ function JobsContent() {
     apiFetch("/jobs/mine")
       .then(async (res) => {
         const data = await res.json().catch(() => null);
-        if (!res.ok)
-          throw new Error(data?.detail || "Failed to retrieve jobs.");
+        if (!res.ok) throw new Error(data?.detail || "Failed to retrieve jobs.");
         if (Array.isArray(data)) {
           setJobs(data);
           setFetchError(null);
         } else setFetchError("Unexpected response from server.");
       })
-      .catch((err) =>
-        setFetchError(err.message || "A network error occurred."),
-      );
+      .catch((err) => setFetchError(err.message || "A network error occurred."))
+      .finally(() => setLoading(false));
   }, []);
 
   const handlePublish = async (id: string) => {
     const res = await apiFetch(`/jobs/${id}/publish`, { method: "POST" });
     if (res.ok) {
       const updated: Job = await res.json();
-      setJobs((prev) =>
-        prev.map((j) => (j.id === id ? { ...j, ...updated } : j)),
-      );
+      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updated } : j)));
+      toast({ title: "Job published", variant: "success" });
     } else {
       const d = await res.json().catch(() => ({}));
-      alert(d.detail || "Failed to publish job.");
+      toast({ title: "Failed to publish job", description: d.detail, variant: "error" });
     }
   };
 
@@ -90,24 +95,22 @@ function JobsContent() {
     const res = await apiFetch(`/jobs/${id}/reprocess`, { method: "POST" });
     if (res.ok) {
       const updated: Job = await res.json();
-      setJobs((prev) =>
-        prev.map((j) => (j.id === id ? { ...j, ...updated } : j)),
-      );
+      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, ...updated } : j)));
+      toast({ title: "Job description re-analyzed", variant: "success" });
     } else {
       const d = await res.json().catch(() => ({}));
-      alert(d.detail || "Failed to reprocess job description.");
+      toast({ title: "Failed to reprocess job description", description: d.detail, variant: "error" });
     }
   };
 
   const handleClose = async (id: string) => {
     const res = await apiFetch(`/jobs/${id}/close`, { method: "POST" });
     if (res.ok) {
-      setJobs((prev) =>
-        prev.map((j) => (j.id === id ? { ...j, status: "closed" } : j)),
-      );
+      setJobs((prev) => prev.map((j) => (j.id === id ? { ...j, status: "closed" } : j)));
+      toast({ title: "Job closed", variant: "success" });
     } else {
       const d = await res.json().catch(() => ({}));
-      alert(d.detail || "Failed to close job.");
+      toast({ title: "Failed to close job", description: d.detail, variant: "error" });
     }
   };
 
@@ -119,160 +122,178 @@ function JobsContent() {
       const res = await apiFetch(`/applications/job/${jobId}`);
       const data = await res.json().catch(() => null);
       if (res.ok && Array.isArray(data)) setApplicants(data);
-      else alert(data?.detail || "Failed to load applicants.");
+      else toast({ title: "Failed to load applicants", description: data?.detail, variant: "error" });
     } finally {
       setLoadingApplicants(false);
     }
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-6 md:p-12 min-h-screen bg-gray-50/50">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-6 mb-8 border-b border-gray-200">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900">
-            Job Postings
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Manage your active listings and candidate pipelines
-          </p>
-        </div>
-        {!selectedJobId && (
-          <button
-            onClick={() => setShowForm(true)}
-            className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-all"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-            Create New Posting
-          </button>
+    <div className="mx-auto max-w-5xl">
+      <PageHeader
+        title="Job postings"
+        description="Manage your active listings and candidate pipelines"
+        actions={
+          !selectedJobId && (
+            <Button leftIcon={<Plus size={15} />} onClick={() => setShowForm(true)}>
+              Create posting
+            </Button>
+          )
+        }
+      />
+
+      <div className="space-y-4 p-6">
+        {fetchError && (
+          <div className="rounded-lg border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-foreground">
+            <strong>Error:</strong> {fetchError}
+          </div>
         )}
-      </div>
 
-      {/* Body — a proper sibling, not nested inside the header */}
-      {fetchError && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm mb-6">
-          <strong>Error:</strong> {fetchError}
-        </div>
-      )}
+        {selectedJobId ? (
+          <div className="space-y-6">
+            <button
+              onClick={() => { setSelectedJobId(null); setApplicants([]); }}
+              className="inline-flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ArrowLeft size={15} />
+              Back to all job postings
+            </button>
 
-      {selectedJobId ? (
-        <div className="space-y-6">
-          <button
-            onClick={() => { setSelectedJobId(null); setApplicants([]); }}
-            className="inline-flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth="2.5" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-            </svg>
-            Back to All Job Postings
-          </button>
-
-          <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-200 bg-gray-50/50">
-              <h2 className="text-xl font-bold text-gray-900">
-                Applicants for:{" "}
-                <span className="text-indigo-600 font-medium">
-                  {jobs.find((j) => j.id === selectedJobId)?.title}
-                </span>
-              </h2>
-            </div>
-
-            {loadingApplicants ? (
-              <div className="py-16 text-center text-gray-500 text-sm flex flex-col items-center gap-3">
-                <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-                Loading applicants…
+            <Card className="overflow-hidden p-0">
+              <div className="border-b border-border bg-muted/40 px-6 py-5">
+                <h2 className="text-lg font-bold text-foreground">
+                  Applicants for:{" "}
+                  <span className="font-medium text-primary">
+                    {jobs.find((j) => j.id === selectedJobId)?.title}
+                  </span>
+                </h2>
               </div>
-            ) : applicants.length === 0 ? (
-              <div className="py-16 text-center">
-                <p className="text-gray-400 text-sm">No applications received yet.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {applicants.map((app) => (
-                  <div key={app.id} className="p-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 hover:bg-gray-50/40 transition-colors">
-                    <div className="space-y-0.5">
-                      <h3 className="font-semibold text-gray-900">{app.applicant_name}</h3>
-                      <p className="text-sm text-gray-500">{app.applicant_email}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Applied {new Date(app.applied_at).toLocaleDateString()}
-                        {app.match_score != null && (
-                          <span className="ml-2 text-indigo-500 font-medium">
-                            · {Math.round(app.match_score * 100)}% match
+
+              {loadingApplicants ? (
+                <div className="space-y-3 p-6">
+                  <SkeletonText lines={4} />
+                </div>
+              ) : applicants.length === 0 ? (
+                <div className="py-16 text-center">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                    <Inbox size={18} />
+                  </div>
+                  <p className="text-sm text-muted-foreground">No applications received yet.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {applicants.map((app) => (
+                    <div
+                      key={app.id}
+                      className="flex flex-col items-start justify-between gap-4 p-6 transition-colors hover:bg-muted/30 sm:flex-row sm:items-center"
+                    >
+                      <div className="space-y-0.5">
+                        <h3 className="font-semibold text-foreground">{app.applicant_name}</h3>
+                        <p className="text-sm text-muted-foreground">{app.applicant_email}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Applied {new Date(app.applied_at).toLocaleDateString()}
+                          {app.match_score != null && (
+                            <span className="ml-2 font-medium text-primary">
+                              · {Math.round(app.match_score * 100)}% match
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {app.is_override && (
+                          <span className="rounded-full border border-warning-border bg-warning-bg px-2 py-0.5 text-xs text-warning-foreground">
+                            Override
                           </span>
                         )}
-                      </p>
+                        <StatusBadge status={app.status} />
+                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {app.is_override && (
-                        <span className="text-xs text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
-                          Override
-                        </span>
-                      )}
-                      <span className="text-xs font-semibold px-2.5 py-1 rounded-full uppercase bg-indigo-50 text-indigo-700 border border-indigo-100">
-                        {app.status}
-                      </span>
-                    </div>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {showForm && (
+              <JobForm
+                onCreated={(job) => { setJobs((prev) => [job, ...prev]); setShowForm(false); }}
+                onCancel={() => setShowForm(false)}
+                toast={toast}
+              />
+            )}
+
+            {loading && (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <SkeletonCard key={i} />
                 ))}
               </div>
             )}
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {showForm && (
-            <JobForm
-              onCreated={(job) => { setJobs((prev) => [job, ...prev]); setShowForm(false); }}
-              onCancel={() => setShowForm(false)}
-            />
-          )}
 
-          {jobs.map((job) => (
-            <div
-              key={job.id}
-              onClick={() => setDetailJobId(job.id)}
-              className="group bg-white border border-gray-200 hover:border-gray-300 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer"
-            >
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-3 flex-wrap">
-                    <h2 className="text-lg font-bold text-gray-900 tracking-tight">{job.title}</h2>
-                    <StatusBadge status={job.status} />
-                    {job.scenario_enabled && (
-                      <span className="text-xs bg-teal-50 text-teal-700 border border-teal-200 px-2 py-0.5 rounded-full font-semibold">
-                        Scenario question
+            {!loading &&
+              jobs.map((job) => (
+                <Card
+                  key={job.id}
+                  interactive
+                  onClick={() => setDetailJobId(job.id)}
+                  className="p-5"
+                >
+                  <CardContent className="p-0">
+                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                      <div className="space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <h2 className="text-lg font-bold tracking-tight text-foreground">
+                            {job.title}
+                          </h2>
+                          <StatusBadge status={job.status} />
+                          {job.scenario_enabled && (
+                            <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                              Scenario question
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                          <span className="capitalize">{job.location || "Remote"}</span>
+                          <span className="text-border">·</span>
+                          <span className="capitalize">{job.work_mode || "—"}</span>
+                          <span className="text-border">·</span>
+                          <span className="font-medium capitalize text-primary">
+                            {job.job_level} level
+                          </span>
+                          <span className="text-border">·</span>
+                          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
+                            {job.hiring_count} open position{job.hiring_count !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      </div>
+                      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground/70 transition-colors group-hover:text-foreground">
+                        Click to view <ChevronRight size={13} />
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-500 flex-wrap">
-                    <span className="capitalize">{job.location || "Remote"}</span>
-                    <span className="text-gray-300">·</span>
-                    <span className="capitalize">{job.work_mode || "—"}</span>
-                    <span className="text-gray-300">·</span>
-                    <span className="capitalize text-indigo-600 font-medium">{job.job_level} level</span>
-                    <span className="text-gray-300">·</span>
-                    <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-semibold">
-                      {job.hiring_count} open position{job.hiring_count !== 1 ? "s" : ""}
-                    </span>
-                  </div>
-                </div>
-                <span className="text-xs text-gray-400 shrink-0 group-hover:text-gray-600 transition-colors">
-                  Click to view →
-                </span>
-              </div>
-            </div>
-          ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
 
-          {jobs.length === 0 && !fetchError && (
-            <div className="text-center py-20 bg-white border border-gray-200 rounded-2xl">
-              <p className="text-gray-500 font-medium">No job postings yet</p>
-              <p className="text-sm text-gray-400 mt-1">Create your first posting to start hiring.</p>
-            </div>
-          )}
-        </div>
-      )}
+            {!loading && jobs.length === 0 && !fetchError && (
+              <Card className="p-14 text-center">
+                <CardContent className="p-0">
+                  <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                    <Inbox size={18} />
+                  </div>
+                  <p className="font-medium text-foreground">No job postings yet</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Create your first posting to start hiring.
+                  </p>
+                  <Button size="sm" className="mt-4" onClick={() => setShowForm(true)}>
+                    Create posting
+                  </Button>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
 
       {detailJobId && (
         <EmployerJobDetailModal
@@ -291,9 +312,11 @@ function JobsContent() {
 function JobForm({
   onCreated,
   onCancel,
+  toast,
 }: {
   onCreated: (j: Job) => void;
   onCancel: () => void;
+  toast: (opts: { title: string; description?: string; variant?: "success" | "error" | "info" }) => void;
 }) {
   const [form, setForm] = useState({
     title: "",
@@ -307,6 +330,7 @@ function JobForm({
     scenario_enabled: false,
   });
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -327,6 +351,7 @@ function JobForm({
     }
 
     setError("");
+    setSubmitting(true);
     try {
       const res = await apiFetch("/jobs/", {
         method: "POST",
@@ -337,147 +362,156 @@ function JobForm({
         setError(data?.detail || "Failed to create job.");
         return;
       }
+      toast({ title: "Job posting created", variant: "success" });
       onCreated(data);
     } catch {
       setError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white border-2 border-indigo-100 rounded-2xl p-6 mb-8 shadow-sm space-y-5">
-      <div>
-        <h2 className="text-xl font-bold text-gray-900">New Job Listing</h2>
-        <p className="text-xs text-gray-500 mt-0.5">Define your position criteria and requirements</p>
-      </div>
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-2.5 rounded-xl text-xs font-medium">
-          {error}
-        </div>
-      )}
-      <div className="space-y-4">
+    <Card className="p-6">
+      <CardContent className="space-y-5 p-0">
         <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Job Title</label>
-          <input
-            placeholder="e.g. Senior Software Engineer"
-            value={form.title}
-            required
-            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Job Description</label>
-          <textarea
-            placeholder="Describe the role, responsibilities, and requirements… (min 50 characters)"
-            rows={5}
-            value={form.description}
-            required
-            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
-            className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-          />
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Location</label>
-            <input
-              placeholder="e.g. Bangalore, India"
-              value={form.location}
-              onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Work Mode</label>
-            <select
-              value={form.work_mode}
-              onChange={(e) => setForm((p) => ({ ...p, work_mode: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">Select</option>
-              <option value="remote">Remote</option>
-              <option value="onsite">Onsite</option>
-              <option value="hybrid">Hybrid</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Level</label>
-            <select
-              value={form.job_level}
-              onChange={(e) => setForm((p) => ({ ...p, job_level: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            >
-              <option value="">Select</option>
-              <option value="fresher">Fresher</option>
-              <option value="junior">Junior</option>
-              <option value="mid">Mid</option>
-              <option value="senior">Senior</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">Headcount</label>
-            <input
-              type="number"
-              min={1}
-              value={form.hiring_count}
-              onChange={(e) => setForm((p) => ({ ...p, hiring_count: Math.max(1, Number(e.target.value)) }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            />
-          </div>
+          <h2 className="text-xl font-bold text-foreground">New job listing</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Define your position criteria and requirements
+          </p>
         </div>
 
-        {/* NEW — salary range */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
-              Salary Min <span className="text-gray-400 normal-case font-normal">(optional, ₹/yr)</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              placeholder="e.g. 800000"
-              value={form.salary_min}
-              onChange={(e) => setForm((p) => ({ ...p, salary_min: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-            />
+        {error && (
+          <div className="rounded-lg border border-danger-border bg-danger-bg px-4 py-2.5 text-xs font-medium text-danger-foreground">
+            {error}
           </div>
-          <div>
-            <label className="block text-xs font-semibold uppercase tracking-wider text-gray-600 mb-1.5">
-              Salary Max <span className="text-gray-400 normal-case font-normal">(optional, ₹/yr)</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              placeholder="e.g. 1500000"
-              value={form.salary_max}
-              onChange={(e) => setForm((p) => ({ ...p, salary_max: e.target.value }))}
-              className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm text-gray-900 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <Field label="Job title" htmlFor="title" required>
+            <Input
+              id="title"
+              placeholder="e.g. Senior Software Engineer"
+              value={form.title}
+              required
+              onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
             />
+          </Field>
+
+          <Field
+            label="Job description"
+            htmlFor="description"
+            required
+            hint="Minimum 50 characters."
+          >
+            <Textarea
+              id="description"
+              placeholder="Describe the role, responsibilities, and requirements…"
+              rows={5}
+              value={form.description}
+              required
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            />
+          </Field>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+            <Field label="Location" htmlFor="location">
+              <Input
+                id="location"
+                placeholder="e.g. Bangalore, India"
+                value={form.location}
+                onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
+              />
+            </Field>
+            <Field label="Work mode" htmlFor="work_mode">
+              <Select
+                id="work_mode"
+                value={form.work_mode}
+                onChange={(e) => setForm((p) => ({ ...p, work_mode: e.target.value }))}
+              >
+                <option value="">Select</option>
+                <option value="remote">Remote</option>
+                <option value="onsite">Onsite</option>
+                <option value="hybrid">Hybrid</option>
+              </Select>
+            </Field>
+            <Field label="Level" htmlFor="job_level">
+              <Select
+                id="job_level"
+                value={form.job_level}
+                onChange={(e) => setForm((p) => ({ ...p, job_level: e.target.value }))}
+              >
+                <option value="">Select</option>
+                <option value="fresher">Fresher</option>
+                <option value="junior">Junior</option>
+                <option value="mid">Mid</option>
+                <option value="senior">Senior</option>
+              </Select>
+            </Field>
+            <Field label="Headcount" htmlFor="hiring_count">
+              <Input
+                id="hiring_count"
+                type="number"
+                min={1}
+                value={form.hiring_count}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, hiring_count: Math.max(1, Number(e.target.value)) }))
+                }
+              />
+            </Field>
           </div>
-        </div>
-      </div>
-      <div className="pt-1">
-        <label className="flex items-center gap-2 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={form.scenario_enabled}
-            onChange={(e) => setForm((p) => ({ ...p, scenario_enabled: e.target.checked }))}
-            className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <span className="text-sm text-gray-700">Include a scenario-based question for candidates</span>
-        </label>
-        <p className="text-xs text-gray-400 mt-1 ml-6">
-          The question is generated automatically the first time a candidate applies — you won't
-          see it in advance.
-        </p>
-      </div>
-      <div className="flex justify-end gap-2 pt-2">
-        <button type="button" onClick={onCancel} className="text-gray-600 bg-gray-100 hover:bg-gray-200 px-5 py-2.5 rounded-xl text-sm font-semibold transition-colors">
-          Cancel
-        </button>
-        <button type="submit" className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-xl text-sm font-semibold shadow-sm transition-colors">
-          Save Posting
-        </button>
-      </div>
-    </form>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Salary min" htmlFor="salary_min" hint="Optional, ₹/yr">
+              <Input
+                id="salary_min"
+                type="number"
+                min={0}
+                placeholder="e.g. 800000"
+                value={form.salary_min}
+                onChange={(e) => setForm((p) => ({ ...p, salary_min: e.target.value }))}
+              />
+            </Field>
+            <Field label="Salary max" htmlFor="salary_max" hint="Optional, ₹/yr">
+              <Input
+                id="salary_max"
+                type="number"
+                min={0}
+                placeholder="e.g. 1500000"
+                value={form.salary_max}
+                onChange={(e) => setForm((p) => ({ ...p, salary_max: e.target.value }))}
+              />
+            </Field>
+          </div>
+
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-muted/30 p-3.5">
+            <input
+              type="checkbox"
+              checked={form.scenario_enabled}
+              onChange={(e) => setForm((p) => ({ ...p, scenario_enabled: e.target.checked }))}
+              className="mt-0.5 h-4 w-4 rounded border-input text-primary focus:ring-ring"
+            />
+            <span>
+              <span className="block text-sm text-foreground">
+                Include a scenario-based question for candidates
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                The question is generated automatically the first time a candidate applies — you
+                won't see it in advance.
+              </span>
+            </span>
+          </label>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting}>
+              Save posting
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }
