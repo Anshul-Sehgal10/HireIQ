@@ -15,6 +15,8 @@ from .routes.scenario import candidate_router as scenario_candidate_router
 
 from .routes.pipeline import employer_router as pipeline_employer_router
 from .routes.pipeline import candidate_router as pipeline_candidate_router
+
+from .routes.admin import router as admin_router
  
 router = APIRouter()
  
@@ -33,3 +35,5 @@ router.include_router(scenario_candidate_router)
 
 router.include_router(pipeline_employer_router)
 router.include_router(pipeline_candidate_router)
+
+router.include_router(admin_router)

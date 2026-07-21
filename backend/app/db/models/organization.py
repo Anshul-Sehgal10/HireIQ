@@ -24,6 +24,7 @@ class VerificationStatus(str, enum.Enum):
     PENDING = "pending"
     VERIFIED = "verified"
     REJECTED = "rejected"
+    BLOCKED = "blocked"
 
 
 class SubscriptionTier(str, enum.Enum):

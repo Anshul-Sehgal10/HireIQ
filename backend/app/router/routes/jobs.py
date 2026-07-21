@@ -11,6 +11,7 @@ from app.core.pagination import encode_cursor
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
 
 from app.db.models.candidate_profiles import CandidateProfile
+from app.db.models.organization import VerificationStatus
 from app.repositories.job_repo import (
     close_job,
     create_job,
@@ -204,6 +205,12 @@ async def publish(
     org = await get_org_for_user(db, user.id)
     if not org or job.org_id != org.id:
         raise HTTPException(403, "Not your job")
+    if org.verification_status != VerificationStatus.VERIFIED:
+        raise HTTPException(
+            403,
+            f"Your organisation must be verified before publishing jobs "
+            f"(current status: {org.verification_status.value}).",
+        )
     return await publish_job(db, job)
 
 

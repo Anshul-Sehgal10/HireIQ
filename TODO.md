@@ -72,47 +72,68 @@ Frontend agent implement these features, Backend agents report frontend features
       auto-posts a SYSTEM broadcast message — no per-candidate stage field
       needed in the UI, just a single control for the whole channel.
 - Note: no WebSocket/live-push yet, this is poll-based
-      (GET .../pipeline/messages) for now — live push is a planned
-      follow-up once this UI exists.
+  (GET .../pipeline/messages) for now — live push is a planned
+  follow-up once this UI exists.
 - A minimal, unstyled backend-test harness exists at /employer/pipeline-test
-      and /candidate/pipeline-test (not linked from nav) if useful as a
-      reference for the request/response shapes while building the real UI.
-      Feel free to ignore/replace entirely.
+  and /candidate/pipeline-test (not linked from nav) if useful as a
+  reference for the request/response shapes while building the real UI.
+  Feel free to ignore/replace entirely.
 
 ## Any Note by the agent
 
 ### Note By Frontend Agent (if any)
 
-### Note By Frontend Agent (if any)
-
 Backend change made this round (small, additive — flagging per project protocol even though the user explicitly authorized it):
+
 - `backend/app/db/models/job.py`: added a `role_summary` @property on `JobPosting` that reads `parsed_data.get("role_summary")` — returns None if extraction hasn't run. No column, migration, or business logic touched.
 - `backend/app/schemas/job.py`: added `role_summary: Optional[str] = None` to `JobResponse`. Every existing route returning `JobResponse`/`JobFeedResponse` now includes it automatically via `from_attributes` — no route code changed.
 - Reason: job feed cards were showing the full raw JD text; now show the LLM's short extracted summary instead, falling back client-side to a truncated description if `role_summary` is null (unprocessed job).
 - Backend agent: please sanity-check this doesn't conflict with anything you have in flight on `JobPosting`/`JobResponse`.
 
-
-
 ### Note By Backend Agent (if any)
 
-Pipeline feature (ranked dashboard + channel chat) is implemented:
+Phase 7 (Admin Moderation) implemented — all 6 items closed:
 
-- Employer: /employer/jobs/{jobId}/pipeline — ranked candidates table
-  (resume match_score + scenario_score shown separately, composite scoring
-  still deferred per backlog), shortlist/reject actions, stage-advance
-  control, and channel chat (broadcast/direct).
-- Candidate: /candidate/pipeline/{applicationId} — read-only message view.
-- Linked in from EmployerJobDetailModal ("Pipeline" button) and the
-  candidate dashboard (shown once an application reaches
-  shortlisted/assessment/interview/offer).
+- `VerificationStatus.BLOCKED` added (needs `alembic upgrade head` — migration
+  file content given to user in chat, not auto-applied since I don't have
+  repo/DB access in this environment).
+- New endpoints, admin-only (`AdminUser` dependency):
+  - `GET  /admin/orgs` — paginated, filter by `verification_status` + `q`,
+    returns member_count/published_job_count/owner_email per org
+  - `POST /admin/orgs/{org_id}/verify|reject|block|unblock` — body: `{reason?: string}`
+  - `GET  /admin/users` — paginated, filter by `role`/`is_active`/`q`
+  - `POST /admin/users/{user_id}/block|unblock` — body: `{reason?: string}`
+- Blocking an org (or rejecting a previously-verified one) auto-closes all
+  its published jobs. Unblocking does NOT reopen them — deliberate
+  republish required (same pattern as other soft-state changes in the app).
+- `publish_job` now 403s unless `org.verification_status == VERIFIED`. This
+  also applies to the "Reopen" button on closed jobs — same endpoint.
+- Fixed the rejected-org dead end: an org owner (or any member) whose org
+  is `REJECTED` can now create/request a new org; their old membership is
+  silently removed first.
+- `AuditLog` (existed, unused) now gets a row on every moderation action.
 
-- These are functional, minimally-styled pages. Frontend agent: feel free to
-restyle to match the rest of the app (Card/Button/PageHeader conventions,
-etc.) but do not change the data flow, add new routes, or alter the
-request/response handling — ping the backend agent first if something
-seems to need new logic.
+**Frontend work needed to surface this (not done — visual/UI is frontend's
+lane per project split):**
 
-- No WebSocket/live-push yet — messages are poll/refresh-based
-(re-fetch on send). That's a planned follow-up backend increment.
+- Admin Dashboard: replace the "coming soon" TODO card with real org/user
+  tables backed by `GET /admin/orgs` and `GET /admin/users`, with
+  verify/reject/block/unblock action buttons calling the new POST endpoints.
+- Employer-facing: org page (`/employer/organization`) should show a clear
+  banner when `verification_status` is `pending`/`rejected`/`blocked`,
+  explaining what it means (especially that `publish` is now blocked
+  until verified, and that a rejected org owner can start a new org).
+- Job posting flow: `publish`/`reopen` can now fail with 403 + a specific
+  message if the org isn't verified — surface that error instead of a
+  generic failure toast.
 
-- Patched candidate/jobs/page.tsx and lib/api.ts (backend agent) to fix a stale-response race condition — rapid filter changes could have an older response overwrite a newer one, making filters appear broken. Added a request-sequence guard + debounced text/salary/location inputs + cache: "no-store". No backend changes were needed this round; /jobs/feed filtering contract is confirmed correct via direct curl testing.
+Also flagging (found while reviewing, not fixed — this is frontend-owned):
+in `candidate/jobs/page.tsx`, `handleWithdraw` is defined but never wired
+to any button — there's no way for a candidate to withdraw an application
+from the job feed page. The backend route (`POST
+/applications/{id}/withdraw`) works correctly and is already used
+elsewhere (candidate dashboard, for the below-threshold-scenario case
+only). This is very likely the actual cause of the "candidate cannot
+withdraw his application" bug on your list — recommend adding a general
+withdraw action to `JobDetailModal` or the dashboard for any active
+(non-terminal) application, not just the scenario-failure case.

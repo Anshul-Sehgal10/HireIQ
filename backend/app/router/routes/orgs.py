@@ -31,6 +31,7 @@ from sqlalchemy import select
 from app.core.dependencies import CurrentUser, EmployerUser, get_db
 from app.db.models.org_invites import InviteDirection, InviteStatus
 from app.db.models.org_members import OrgRole
+from app.db.models.organization import VerificationStatus
 from app.db.models.user import User
 from app.repositories import org_repo
 from app.schemas.org import (
@@ -66,7 +67,13 @@ async def create_org(
 ):
     existing = await org_repo.get_org_for_user(db, user.id)
     if existing:
-        raise HTTPException(400, "You are already a member of an organisation")
+        if existing.verification_status != VerificationStatus.REJECTED:
+            raise HTTPException(400, "You are already a member of an organisation")
+        # Rejected org owners get a fresh start — uq_org_members_user allows
+        # only one org membership per user, so without this they'd be stuck
+        # on a dead org forever. The rejected org row itself is left intact
+        # for audit history; only the membership is removed.
+        await org_repo.remove_member(db, existing.id, user.id)
 
     org = await org_repo.create_org(db, user.id, body.name, body.domain)
     return org
