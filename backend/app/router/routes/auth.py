@@ -45,7 +45,6 @@ def set_refresh_cookie(response: Response, refresh_token: str):
         max_age=60 * 60 * 24 * settings.REFRESH_TOKEN_EXPIRE_DAYS, # 7 days
     )
 
-# Add this helper alongside set_refresh_cookie:
 
 def set_access_cookie(response: Response, access_token: str):
     """Store the short-lived access token in a browser-readable cookie."""
