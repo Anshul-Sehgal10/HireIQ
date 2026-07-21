@@ -14,3 +14,5 @@ export { ToastProvider, useToast } from "./Toast";
 export { default as ThemeToggle } from "./ThemeToggle";
 export { default as PageHeader } from "./PageHeader";
 export { default as StatusBadge } from "./StatusBadge";
+export { default as MatchScoreRing } from "./MatchScoreRing";
+export { default as TimerRing } from "./TimerRing";

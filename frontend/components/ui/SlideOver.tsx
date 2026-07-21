@@ -59,7 +59,7 @@ export default function SlideOver({ open, onClose, title, description, children,
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
+        <div className="flex-1 overflow-y-auto p-5 scrollbar-none">{children}</div>
         {footer && <div className="flex items-center justify-end gap-2 border-t border-border p-5">{footer}</div>}
       </div>
     </div>,

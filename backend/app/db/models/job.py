@@ -172,6 +172,19 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
 
         Index("ix_job_postings_categories", "categories", postgresql_using="gin"),
     )
+    
+    @property
+    def role_summary(self) -> Optional[str]:
+        """
+        LLM-extracted 1-2 sentence role summary from parsed_data, exposed
+        directly on the model so JobResponse (from_attributes) can read it
+        without routes needing to know parsed_data's internal shape.
+        Returns None until JD extraction has run (see job_processing.py) —
+        callers decide their own fallback (e.g. truncated description).
+        """
+        if self.parsed_data:
+            return self.parsed_data.get("role_summary")
+        return None
 
     def __repr__(self) -> str:
         return f"<JobPosting id={self.id} title={self.title!r} status={self.status}>"

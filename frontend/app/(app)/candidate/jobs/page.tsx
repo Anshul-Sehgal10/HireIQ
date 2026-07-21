@@ -2,10 +2,13 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { SlidersHorizontal, X, FileText } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { RoleGuard } from "@/components/RoleGuard";
 import JobDetailModal from "@/components/JobDetailModal";
+import JobCard from "@/components/JobCard";
 import ResumeUpload from "@/components/ResumeUpload";
+import { PageHeader, Card, SkeletonCard, Button, Input } from "@/components/ui";
 
 const ALL_CATEGORIES = [
   "backend", "frontend", "fullstack", "mobile", "devops_cloud", "data_ml",
@@ -29,6 +32,7 @@ interface Job {
   org_name: string | null;
   categories: string[] | null;
   scenario_enabled: boolean;
+  role_summary: string | null;
 }
 
 interface Application {
@@ -66,13 +70,7 @@ interface Filters {
   salary_max: string;
 }
 
-const EMPTY_FILTERS: Filters = {
-  q: "",
-  categories: [],
-  location: "",
-  salary_min: "",
-  salary_max: "",
-};
+const EMPTY_FILTERS: Filters = { q: "", categories: [], location: "", salary_min: "", salary_max: "" };
 
 export default function CandidateJobsPage() {
   return (
@@ -82,16 +80,9 @@ export default function CandidateJobsPage() {
   );
 }
 
-function ActiveResumeSwitcher({
-  resumeVersions,
-  onSwitched,
-}: {
-  resumeVersions: ResumeVersion[];
-  onSwitched: () => void;
-}) {
+function ActiveResumeSwitcher({ resumeVersions, onSwitched }: { resumeVersions: ResumeVersion[]; onSwitched: () => void }) {
   const [switching, setSwitching] = useState(false);
   const current = resumeVersions.find((r) => r.is_current);
-
   if (resumeVersions.length <= 1) return null;
 
   const handleChange = async (id: string) => {
@@ -112,69 +103,65 @@ function ActiveResumeSwitcher({
   };
 
   return (
-    <div className="flex items-center gap-2 text-sm mb-4">
+    <div className="mb-4 flex items-center gap-2 text-sm">
+      <FileText size={14} className="text-muted-foreground" />
       <span className="text-muted-foreground">Applying with:</span>
       <select
         value={current?.id ?? ""}
         onChange={(e) => handleChange(e.target.value)}
         disabled={switching}
-        className="border border-input rounded-lg px-2.5 py-1.5 text-sm text-foreground bg-card"
+        className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       >
         {resumeVersions.map((rv) => (
-          <option key={rv.id} value={rv.id}>
-            {rv.label ?? `Version ${rv.version_number}`}
-          </option>
+          <option key={rv.id} value={rv.id}>{rv.label ?? `Version ${rv.version_number}`}</option>
         ))}
       </select>
-      {switching && <span className="text-xs text-muted-foreground animate-pulse">Switching…</span>}
+      {switching && <span className="text-xs animate-pulse text-muted-foreground">Switching…</span>}
     </div>
   );
 }
 
-/** Local draft state for text/number inputs — only commits to `filters`
- *  (and therefore only fires a fetch) after the user stops typing. This is
- *  what was missing before: every keystroke fired an immediate, unguarded
- *  fetch, and combined with no stale-response protection, out-of-order
- *  responses could silently overwrite a newer filter result with an older
- *  one — which is exactly what looked like "filters don't work." */
-function FilterBar({
-  filters,
-  onChange,
-  onReset,
-  categoriesAreDefault,
+const SALARY_BANDS: { label: string; min?: number; max?: number }[] = [
+  { label: "Any" },
+  { label: "Up to ₹5L", max: 500000 },
+  { label: "₹5L – 10L", min: 500000, max: 1000000 },
+  { label: "₹10L – 15L", min: 1000000, max: 1500000 },
+  { label: "₹15L – 25L", min: 1500000, max: 2500000 },
+  { label: "₹25L – 40L", min: 2500000, max: 4000000 },
+  { label: "₹40L+", min: 4000000 },
+];
+
+function FilterPanel({
+  filters, onChange, onReset, categoriesAreDefault, onClose,
 }: {
   filters: Filters;
   onChange: (f: Filters) => void;
   onReset: () => void;
   categoriesAreDefault: boolean;
+  onClose: () => void;
 }) {
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
-  const [draft, setDraft] = useState({
-    q: filters.q,
-    location: filters.location,
-    salary_min: filters.salary_min,
-    salary_max: filters.salary_max,
-  });
+  const [catQuery, setCatQuery] = useState("");
+  const [locDraft, setLocDraft] = useState(filters.location);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Keep local draft in sync if filters are reset/changed externally
-  // (e.g. "Reset to my profile filters", or a resume switch).
-  useEffect(() => {
-    setDraft({
-      q: filters.q,
-      location: filters.location,
-      salary_min: filters.salary_min,
-      salary_max: filters.salary_max,
-    });
-  }, [filters.q, filters.location, filters.salary_min, filters.salary_max]);
+  useEffect(() => setLocDraft(filters.location), [filters.location]);
 
-  const commitDraft = (next: typeof draft) => {
-    setDraft(next);
+  const commitLocation = (val: string) => {
+    setLocDraft(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      onChange({ ...filters, ...next });
-    }, 400);
+    debounceRef.current = setTimeout(() => onChange({ ...filters, location: val }), 400);
   };
+
+  const activeBand =
+    SALARY_BANDS.find(
+      (b) => (b.min?.toString() ?? "") === filters.salary_min && (b.max?.toString() ?? "") === filters.salary_max,
+    ) ?? SALARY_BANDS[0];
+
+  const selectBand = (band: (typeof SALARY_BANDS)[number]) => {
+    onChange({ ...filters, salary_min: band.min?.toString() ?? "", salary_max: band.max?.toString() ?? "" });
+  };
+
+  const filteredCategories = ALL_CATEGORIES.filter((c) => c.toLowerCase().includes(catQuery.toLowerCase()));
 
   const toggleCategory = (cat: string) => {
     const next = filters.categories.includes(cat)
@@ -184,74 +171,88 @@ function FilterBar({
   };
 
   return (
-    <div className="mb-6 space-y-3">
-      <input
-        value={draft.q}
-        onChange={(e) => commitDraft({ ...draft, q: e.target.value })}
-        placeholder="Search by job title or company…"
-        className="w-full border border-input rounded-lg px-4 py-2.5 text-sm text-foreground bg-card"
-      />
-
-      <div className="flex flex-wrap items-center gap-3">
-        <input
-          value={draft.location}
-          onChange={(e) => commitDraft({ ...draft, location: e.target.value })}
-          placeholder="Location"
-          className="border border-input rounded-lg px-3 py-1.5 text-sm text-foreground bg-card w-36"
-        />
-        <input
-          type="number"
-          value={draft.salary_min}
-          onChange={(e) => commitDraft({ ...draft, salary_min: e.target.value })}
-          placeholder="Min salary"
-          className="border border-input rounded-lg px-3 py-1.5 text-sm text-foreground bg-card w-28"
-        />
-        <input
-          type="number"
-          value={draft.salary_max}
-          onChange={(e) => commitDraft({ ...draft, salary_max: e.target.value })}
-          placeholder="Max salary"
-          className="border border-input rounded-lg px-3 py-1.5 text-sm text-foreground bg-card w-28"
-        />
-        <button
-          onClick={() => setShowCategoryPicker((v) => !v)}
-          className="text-sm border border-input rounded-lg px-3 py-1.5 text-foreground bg-card"
-        >
-          Categories {filters.categories.length > 0 && `(${filters.categories.length})`}
+    <Card className="mb-5 p-5">
+      <div className="mb-5 flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-foreground">Refine results</h3>
+        <button onClick={onClose} aria-label="Close filters" className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+          <X size={15} />
         </button>
-        {!categoriesAreDefault && (
-          <button onClick={onReset} className="text-xs text-primary hover:text-primary-hover">
-            Reset to my profile filters
-          </button>
-        )}
-        {filters.categories.length > 0 && (
-          <button
-            onClick={() => onChange({ ...filters, categories: [] })}
-            className="text-xs text-muted-foreground hover:text-foreground"
-          >
-            Clear categories (show all)
-          </button>
-        )}
       </div>
 
-      {showCategoryPicker && (
-        <div className="flex flex-wrap gap-1.5 border border-border rounded-lg p-3 bg-muted">
-          {ALL_CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => toggleCategory(cat)}
-              className={`text-xs px-2.5 py-1 rounded-full capitalize border transition-colors ${
-                filters.categories.includes(cat)
-                  ? "bg-primary border-primary text-primary-foreground"
-                  : "bg-card border-border text-muted-foreground"
-              }`}
-            >
-              {cat.replace(/_/g, " ")}
-            </button>
-          ))}
+      {/* Location */}
+      <div className="mb-5">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</p>
+        <Input placeholder="City or remote" value={locDraft} onChange={(e) => commitLocation(e.target.value)} />
+      </div>
+
+      {/* Salary — scrollable selector */}
+      <div className="mb-5">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salary range</p>
+        <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
+          {SALARY_BANDS.map((band) => {
+            const active = band.label === activeBand.label;
+            return (
+              <button
+                key={band.label}
+                onClick={() => selectBand(band)}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {band.label}
+              </button>
+            );
+          })}
         </div>
-      )}
-    </div>
+      </div>
+
+      {/* Categories */}
+      <div>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Categories</p>
+          <div className="flex items-center gap-3">
+            {!categoriesAreDefault && (
+              <button onClick={onReset} className="text-xs font-medium text-primary hover:text-primary-hover">
+                Reset to profile
+              </button>
+            )}
+            {filters.categories.length > 0 && (
+              <button
+                onClick={() => onChange({ ...filters, categories: [] })}
+                className="text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Clear all
+              </button>
+            )}
+          </div>
+        </div>
+
+        <Input placeholder="Search categories…" value={catQuery} onChange={(e) => setCatQuery(e.target.value)} className="mb-2.5" />
+
+        <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-muted/30 p-2.5">
+          <div className="flex flex-wrap gap-1.5">
+            {filteredCategories.length === 0 && (
+              <p className="px-1 py-2 text-xs text-muted-foreground">No categories match &quot;{catQuery}&quot;</p>
+            )}
+            {filteredCategories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => toggleCategory(cat)}
+                className={`rounded-full border px-2.5 py-1 text-xs font-medium capitalize transition-colors ${
+                  filters.categories.includes(cat)
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {cat.replace(/_/g, " ")}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }
 
@@ -262,6 +263,7 @@ function JobFeed() {
   const [feedStatus, setFeedStatus] = useState<"loading" | "resume_required" | "ok" | "error">("loading");
   const [error, setError] = useState<string | null>(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -269,12 +271,11 @@ function JobFeed() {
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [searchDraft, setSearchDraft] = useState("");
   const [defaultCategories, setDefaultCategories] = useState<string[]>([]);
   const [initialized, setInitialized] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Discards any in-flight response that isn't for the most recent request —
-  // this is the actual fix. Without it, an older (filtered) response can
-  // resolve after a newer (cleared) one and silently overwrite the UI.
   const requestIdRef = useRef(0);
 
   useEffect(() => {
@@ -317,7 +318,7 @@ function JobFeed() {
         apiFetch("/resumes/"),
       ]);
 
-      if (requestId !== requestIdRef.current) return; // a newer request superseded this one
+      if (requestId !== requestIdRef.current) return;
 
       if (jobsRes.status === 403) {
         const data = await jobsRes.json().catch(() => ({}));
@@ -352,11 +353,11 @@ function JobFeed() {
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || !nextCursor) return;
-    const requestId = requestIdRef.current; // pagination piggybacks on the current filter set
+    const requestId = requestIdRef.current;
     setLoadingMore(true);
     try {
       const res = await apiFetch(`/jobs/feed${buildQuery(filters, nextCursor)}`);
-      if (requestId !== requestIdRef.current) return; // filters changed mid-flight — discard
+      if (requestId !== requestIdRef.current) return;
       if (!res.ok) throw new Error("Failed to load more jobs");
       const data: JobFeedResponse = await res.json();
       if (requestId !== requestIdRef.current) return;
@@ -377,12 +378,7 @@ function JobFeed() {
         apiFetch("/candidates/me/overview"),
         apiFetch("/resumes/"),
       ]);
-
-      if (resumesRes.ok) {
-        const resumesData = await resumesRes.json();
-        setResumeVersions(Array.isArray(resumesData) ? resumesData : []);
-      }
-
+      if (resumesRes.ok) setResumeVersions(await resumesRes.json());
       if (overviewRes.ok) {
         const data = await overviewRes.json();
         const cats: string[] = data.resume_categories ?? [];
@@ -406,13 +402,19 @@ function JobFeed() {
     if (feedStatus !== "ok" || !hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => { if (entries[0]?.isIntersecting) loadMore(); },
-      { rootMargin: "400px" },
-    );
+    const observer = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) loadMore(); }, { rootMargin: "400px" });
     observer.observe(el);
     return () => observer.disconnect();
   }, [feedStatus, hasMore, loadMore]);
+
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      setFilters((f) => (f.q === searchDraft ? f : { ...f, q: searchDraft }));
+    }, 400);
+    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchDraft]);
 
   const handleWithdraw = async (jobId: string) => {
     const application = applications.find((a) => a.job_id === jobId && a.status !== "withdrawn");
@@ -431,130 +433,111 @@ function JobFeed() {
 
   if (feedStatus === "resume_required") {
     return (
-      <div className="max-w-lg mx-auto p-8">
-        <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
-          <h1 className="text-xl font-bold text-foreground mb-2">Upload your resume first</h1>
-          <p className="text-muted-foreground text-sm mb-6">
+      <div className="mx-auto max-w-lg p-8">
+        <Card className="p-8">
+          <h1 className="mb-2 text-xl font-bold text-foreground">Upload your resume first</h1>
+          <p className="mb-6 text-sm text-muted-foreground">
             You need to upload a resume before you can browse and apply to jobs.
           </p>
           <ResumeUpload onUploaded={() => loadFeed(filters)} />
-        </div>
+        </Card>
       </div>
     );
   }
 
-  const appliedJobIds = new Set(applications.filter((a) => a.status !== "withdrawn").map((a) => a.job_id));
-  const categoriesAreDefault =
-    JSON.stringify([...filters.categories].sort()) === JSON.stringify([...defaultCategories].sort());
+  const appliedJobIds = new Map(applications.filter((a) => a.status !== "withdrawn").map((a) => [a.job_id, a.status]));
+  const categoriesAreDefault = JSON.stringify([...filters.categories].sort()) === JSON.stringify([...defaultCategories].sort());
+  const activeFilterCount =
+    (filters.location ? 1 : 0) + (filters.salary_min ? 1 : 0) + (filters.salary_max ? 1 : 0) +
+    (categoriesAreDefault ? 0 : filters.categories.length);
 
   return (
-    <div className="max-w-3xl mx-auto p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-foreground">Job Feed</h1>
-        <Link href="/candidate/resumes" className="text-sm text-muted-foreground hover:text-foreground">
-          Manage resumes
-        </Link>
-      </div>
-
-      <ActiveResumeSwitcher resumeVersions={resumeVersions} onSwitched={handleResumeSwitch} />
-
-      <FilterBar
-        filters={filters}
-        onChange={setFilters}
-        onReset={() => setFilters((f) => ({ ...f, categories: defaultCategories }))}
-        categoriesAreDefault={categoriesAreDefault}
+    <div className="mx-auto max-w-5xl">
+      <PageHeader
+        title="Job feed"
+        description="Ranked by fit with your active resume"
+        actions={
+          <Link href="/candidate/resumes" className="text-sm text-muted-foreground hover:text-foreground">
+            Manage resumes
+          </Link>
+        }
       />
 
-      {error && (
-        <div className="mb-4 bg-danger-bg border border-danger-border text-danger-foreground px-4 py-3 rounded-lg text-sm">
-          {error}
+      <div className="p-6">
+        <ActiveResumeSwitcher resumeVersions={resumeVersions} onSwitched={handleResumeSwitch} />
+
+        <div className="mb-5 flex gap-3">
+          <div className="relative flex-1">
+            <Input
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              placeholder="Search by job title or company…"
+            />
+          </div>
+          <Button
+            variant={showFilters || activeFilterCount > 0 ? "primary" : "outline"}
+            leftIcon={<SlidersHorizontal size={14} />}
+            onClick={() => setShowFilters((v) => !v)}
+          >
+            Filters{activeFilterCount > 0 && ` (${activeFilterCount})`}
+          </Button>
         </div>
-      )}
 
-      {feedStatus === "loading" && (
-        <p className="text-muted-foreground text-sm text-center py-12 animate-pulse">Loading jobs…</p>
-      )}
+        {showFilters && (
+          <FilterPanel
+            filters={filters}
+            onChange={setFilters}
+            onReset={() => setFilters((f) => ({ ...f, categories: defaultCategories }))}
+            categoriesAreDefault={categoriesAreDefault}
+            onClose={() => setShowFilters(false)}
+          />
+        )}
 
-      {feedStatus === "ok" && jobs.length === 0 && (
-        <p className="text-muted-foreground text-sm text-center py-12">No jobs match your filters.</p>
-      )}
+        {error && (
+          <div className="mb-4 rounded-lg border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-foreground">
+            {error}
+          </div>
+        )}
 
-      <div className="space-y-4">
-        {jobs.map((job) => {
-          const applied = appliedJobIds.has(job.id);
-          const meta = [job.location, job.work_mode, job.job_level].filter(Boolean).join(" · ");
+        {feedStatus === "loading" && (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        )}
 
-          return (
-            <div
+        {feedStatus === "ok" && jobs.length === 0 && (
+          <div className="py-16 text-center">
+            <p className="text-sm text-muted-foreground">No jobs match your filters.</p>
+          </div>
+        )}
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {jobs.map((job) => (
+            <JobCard
               key={job.id}
+              job={job}
+              applied={appliedJobIds.has(job.id)}
+              applicationStatus={appliedJobIds.get(job.id)}
               onClick={() => setDetailJobId(job.id)}
-              className="border border-border rounded-xl p-5 bg-card shadow-sm cursor-pointer hover:border-primary/40 hover:-translate-y-0.5 hover:shadow-md transition-all"
-            >
-              <div className="flex justify-between items-start gap-4">
-                <div className="flex-1 min-w-0">
-                  <h2 className="font-semibold text-foreground text-base">{job.title}</h2>
-                  {job.org_name && <p className="text-sm text-muted-foreground">{job.org_name}</p>}
-                  {job.scenario_enabled && (
-                    <span className="inline-block text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium mt-1">
-                      Scenario question
-                    </span>
-                  )}
-                  {meta && <p className="text-sm text-muted-foreground mt-0.5">{meta}</p>}
-                  {job.categories && job.categories.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {job.categories.map((c) => (
-                        <span key={c} className="inline-block bg-muted text-muted-foreground text-xs px-2 py-1 rounded-full capitalize">
-                          {c.replace(/_/g, " ")}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {(job.salary_min || job.salary_max) && (
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                      {job.salary_min && job.salary_max
-                        ? `₹${job.salary_min.toLocaleString()} – ₹${job.salary_max.toLocaleString()}`
-                        : job.salary_min
-                          ? `From ₹${job.salary_min.toLocaleString()}`
-                          : `Up to ₹${job.salary_max!.toLocaleString()}`}
-                    </p>
-                  )}
-                  <p className="text-sm text-muted-foreground mt-3 line-clamp-3">{job.description}</p>
-                </div>
-                <div className="shrink-0">
-                  {applied && (
-                    <div className="flex flex-col items-end gap-2">
-                      <span className="text-xs bg-success-bg text-success-foreground px-2.5 py-1 rounded-full font-medium">
-                        Applied
-                      </span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); handleWithdraw(job.id); }}
-                        className="text-xs text-muted-foreground hover:text-danger transition-colors"
-                      >
-                        Withdraw
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {feedStatus === "ok" && hasMore && (
-        <div ref={sentinelRef} className="py-8 text-center">
-          <p className="text-xs text-muted-foreground animate-pulse">{loadingMore ? "Loading more jobs…" : ""}</p>
+            />
+          ))}
         </div>
-      )}
-      {feedStatus === "ok" && !hasMore && jobs.length > 0 && (
-        <p className="text-center text-xs text-muted-foreground py-8">You've reached the end of the feed.</p>
-      )}
+
+        {feedStatus === "ok" && hasMore && (
+          <div ref={sentinelRef} className="py-8 text-center">
+            <p className="text-xs animate-pulse text-muted-foreground">{loadingMore ? "Loading more jobs…" : ""}</p>
+          </div>
+        )}
+        {feedStatus === "ok" && !hasMore && jobs.length > 0 && (
+          <p className="py-8 text-center text-xs text-muted-foreground">You've reached the end of the feed.</p>
+        )}
+      </div>
 
       {detailJobId && (
         <JobDetailModal
           jobId={detailJobId}
           resumeVersions={resumeVersions}
-          application={applications.find((a) => a.job_id === detailJobId && a.status !== "withdrawn")}
+          application={applications.find((a) => a.job_id === detailJobId && a.status !== "withdrawn") as any}
           onClose={() => setDetailJobId(null)}
           onApplied={(application) => {
             setApplications((prev) => [...prev, application] as any);

@@ -19,7 +19,15 @@ const SIZE_CLASSES = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg" };
 
 /** Centered modal — reserve for small/simple confirmations. Heavier content
  *  (job detail, applicant review, etc.) should use SlideOver instead. */
-export default function Modal({ open, onClose, title, description, children, footer, size = "md" }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  description,
+  children,
+  footer,
+  size = "md",
+}: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const handleKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -35,20 +43,32 @@ export default function Modal({ open, onClose, title, description, children, foo
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 animate-fade-in bg-slate-950/50 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
+      <div
+        className="absolute inset-0 animate-fade-in bg-slate-950/50 backdrop-blur-sm"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <div
         role="dialog"
         aria-modal="true"
         className={cn(
-          "relative w-full animate-fade-in max-h-[85vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-xl",
+          "relative w-full animate-fade-in max-h-[85vh] overflow-y-auto rounded-2xl border border-border bg-card shadow-xl scrollbar-none",
           SIZE_CLASSES[size],
         )}
       >
         {(title || description) && (
           <div className="flex items-start justify-between gap-4 border-b border-border p-5">
             <div>
-              {title && <h2 className="text-base font-semibold text-foreground">{title}</h2>}
-              {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
+              {title && (
+                <h2 className="text-base font-semibold text-foreground">
+                  {title}
+                </h2>
+              )}
+              {description && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {description}
+                </p>
+              )}
             </div>
             <button
               onClick={onClose}
@@ -60,7 +80,11 @@ export default function Modal({ open, onClose, title, description, children, foo
           </div>
         )}
         <div className="p-5">{children}</div>
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-border p-5">{footer}</div>}
+        {footer && (
+          <div className="flex items-center justify-end gap-2 border-t border-border p-5">
+            {footer}
+          </div>
+        )}
       </div>
     </div>,
     document.body,

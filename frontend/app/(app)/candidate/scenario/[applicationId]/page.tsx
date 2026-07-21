@@ -2,8 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { AlertTriangle, ArrowLeft, Clock3 } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
+import { Card, Button, Textarea, MatchScoreRing, TimerRing } from "@/components/ui";
 
 interface ScenarioQuestion {
   id: string;
@@ -51,22 +53,22 @@ function ScenarioContent() {
 
   const [answer, setAnswer] = useState("");
   const [timeLeft, setTimeLeft] = useState(0);
+  const [totalTime, setTotalTime] = useState(0);
   const pasteDetectedRef = useRef(false);
   const tabSwitchesRef = useRef(0);
-  const submittingRef = useRef(false); // guards against double-submit (manual + auto)
+  const [tabSwitchCount, setTabSwitchCount] = useState(0);
+  const submittingRef = useRef(false);
   const [overriding, setOverriding] = useState(false);
 
-  // --- Start the attempt on mount ---
   useEffect(() => {
     (async () => {
       try {
-        const res = await apiFetch(`/applications/${applicationId}/scenario/start`, {
-          method: "POST",
-        });
+        const res = await apiFetch(`/applications/${applicationId}/scenario/start`, { method: "POST" });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail ?? "Failed to start scenario");
         setQuestion(data);
         setTimeLeft(data.time_remaining_seconds);
+        setTotalTime(data.time_limit_seconds);
         setStage("in_progress");
       } catch (e: any) {
         setErrorMsg(e.message);
@@ -75,16 +77,17 @@ function ScenarioContent() {
     })();
   }, [applicationId]);
 
-  // --- Anti-gaming signal tracking ---
   useEffect(() => {
     const handleVisibility = () => {
-      if (document.hidden) tabSwitchesRef.current += 1;
+      if (document.hidden) {
+        tabSwitchesRef.current += 1;
+        setTabSwitchCount(tabSwitchesRef.current);
+      }
     };
     document.addEventListener("visibilitychange", handleVisibility);
     return () => document.removeEventListener("visibilitychange", handleVisibility);
   }, []);
 
-  // --- Countdown, auto-submits at zero ---
   useEffect(() => {
     if (stage !== "in_progress") return;
     if (timeLeft <= 0) {
@@ -119,12 +122,10 @@ function ScenarioContent() {
     }
   };
 
-    const confirmOverride = async () => {
+  const confirmOverride = async () => {
     setOverriding(true);
     try {
-      const res = await apiFetch(`/applications/${applicationId}/scenario/override`, {
-        method: "POST",
-      });
+      const res = await apiFetch(`/applications/${applicationId}/scenario/override`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to apply override");
       setResult(data);
@@ -135,30 +136,29 @@ function ScenarioContent() {
     }
   };
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
-  const urgent = timeLeft <= 30;
+  const urgent = totalTime > 0 && timeLeft / totalTime <= 0.15;
+  const wordCount = answer.trim() ? answer.trim().split(/\s+/).length : 0;
 
   if (stage === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950">
-        <p className="text-slate-400 text-sm animate-pulse">Preparing your scenario question…</p>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="animate-pulse text-sm text-muted-foreground">Preparing your scenario question…</p>
       </div>
     );
   }
 
   if (stage === "error") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="max-w-md text-center">
-          <h1 className="text-white font-bold text-lg mb-2">Something went wrong</h1>
-          <p className="text-red-400 text-sm mb-6">{errorMsg}</p>
-          <button
-            onClick={() => router.push("/candidate/jobs")}
-            className="text-sm text-slate-400 hover:text-white transition-colors"
-          >
-            ← Back to job feed
-          </button>
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-danger-bg text-danger">
+            <AlertTriangle size={20} />
+          </div>
+          <h1 className="mb-2 text-lg font-bold text-foreground">Something went wrong</h1>
+          <p className="mb-6 text-sm text-danger">{errorMsg}</p>
+          <Button variant="outline" leftIcon={<ArrowLeft size={14} />} onClick={() => router.push("/candidate/jobs")}>
+            Back to job feed
+          </Button>
         </div>
       </div>
     );
@@ -166,124 +166,110 @@ function ScenarioContent() {
 
   if (stage === "done" && result) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 px-4">
-        <div className="max-w-lg w-full bg-slate-900 border border-slate-800 rounded-2xl p-8">
-          <h1 className="text-white font-bold text-xl mb-1">Response submitted</h1>
-          <p className="text-slate-400 text-sm mb-6">
+      <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
+        <Card className="w-full max-w-lg p-8">
+          <h1 className="text-xl font-bold text-foreground">Response submitted</h1>
+          <p className="mb-6 mt-1 text-sm text-muted-foreground">
             Your answer has been recorded and factored into your application.
           </p>
 
-          {result.score != null && (
-            <div
-              className={`rounded-xl p-5 mb-4 border ${
-                result.meets_threshold
-                  ? "bg-slate-800 border-slate-700"
-                  : "bg-amber-500/10 border-amber-500/25"
-              }`}
-            >
-              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Score</p>
-              <p
-                className={`text-3xl font-bold ${
-                  result.meets_threshold ? "text-emerald-400" : "text-amber-400"
-                }`}
-              >
-                {Math.round(result.score * 100)}%
-              </p>
+          {result.score != null ? (
+            <div className="mb-6 flex items-center gap-5 rounded-xl border border-border bg-muted/40 p-5">
+              <MatchScoreRing score={result.score} threshold={result.scenario_score_threshold} size="lg" />
+              <div>
+                <p className={`text-sm font-semibold ${result.meets_threshold ? "text-success" : "text-warning"}`}>
+                  {result.meets_threshold ? "Meets the bar for this role" : "Below this role's bar"}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Needed {Math.round(result.scenario_score_threshold * 100)}% to pass automatically.
+                </p>
+              </div>
             </div>
-          )}
-
-          {result.score == null && (
-            <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-5 mb-4">
-              <p className="text-sm text-amber-400">
-                Your response was saved, but automatic scoring didn't complete. This won't
-                block your application — it'll be reviewed separately.
+          ) : (
+            <div className="mb-6 rounded-xl border border-warning-border bg-warning-bg p-5">
+              <p className="text-sm text-warning-foreground">
+                Your response was saved, but automatic scoring didn't complete. This won't block your
+                application — it'll be reviewed separately.
               </p>
             </div>
           )}
 
           {result.requires_override && (
-            <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-5 mb-6 space-y-3">
-              <p className="text-sm text-amber-300">
-                Your score didn't meet this role's bar. Your application hasn't been submitted
-                yet — you can use one of your monthly overrides to submit it anyway.
+            <div className="mb-6 space-y-3 rounded-xl border border-warning-border bg-warning-bg p-5">
+              <p className="text-sm text-warning-foreground">
+                Your application hasn't been submitted yet — you can use one of your monthly overrides to
+                submit it anyway.
               </p>
-              <p className="text-xs text-amber-400/80">
+              <p className="text-xs text-warning-foreground/80">
                 {result.overrides_unlimited
                   ? "Unlimited overrides on your plan."
                   : `${result.overrides_remaining} override${result.overrides_remaining !== 1 ? "s" : ""} remaining this month.`}
               </p>
-              <button
+              <Button
+                variant="secondary"
+                className="w-full"
+                loading={overriding}
+                disabled={result.overrides_remaining === 0}
                 onClick={confirmOverride}
-                disabled={overriding || result.overrides_remaining === 0}
-                className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
               >
-                {overriding
-                  ? "Submitting…"
-                  : result.overrides_remaining === 0
-                    ? "No overrides remaining"
-                    : "Use an override and submit anyway"}
-              </button>
+                {result.overrides_remaining === 0 ? "No overrides remaining" : "Use an override and submit anyway"}
+              </Button>
             </div>
           )}
 
           {result.ai_summary && (
             <div className="mb-6">
-              <p className="text-xs text-slate-500 uppercase tracking-wide mb-1.5">Feedback</p>
-              <p className="text-sm text-slate-300 leading-relaxed">{result.ai_summary}</p>
+              <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Feedback</p>
+              <p className="text-sm leading-relaxed text-foreground">{result.ai_summary}</p>
             </div>
           )}
 
-          <button
-            onClick={() => router.push("/candidate/jobs")}
-            className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
-          >
+          <Button className="w-full" onClick={() => router.push("/candidate/jobs")}>
             Back to job feed
-          </button>
-        </div>
+          </Button>
+        </Card>
       </div>
     );
   }
 
-  // in_progress or submitting
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col">
-      <header className="border-b border-slate-800 px-6 py-4 flex items-center justify-between shrink-0">
-        <span className="text-xs font-semibold tracking-widest text-emerald-400 uppercase">
-          Scenario question
-        </span>
-        <span
-          className={`text-lg font-mono font-bold tabular-nums ${
-            urgent ? "text-red-400" : "text-white"
-          }`}
-        >
-          {minutes}:{seconds.toString().padStart(2, "0")}
-        </span>
+    <div className="flex min-h-screen flex-col bg-background">
+      <header className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-border bg-background/95 px-6 py-3 backdrop-blur-sm">
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">Scenario question</span>
+          {tabSwitchCount > 0 && (
+            <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+              <AlertTriangle size={11} className="text-warning" /> {tabSwitchCount} tab switch{tabSwitchCount !== 1 ? "es" : ""} logged
+            </p>
+          )}
+        </div>
+        <TimerRing secondsLeft={timeLeft} totalSeconds={totalTime} size={52} />
       </header>
 
-      <div className="flex-1 max-w-2xl w-full mx-auto px-6 py-10">
-        <p className="text-white text-base leading-relaxed mb-8 whitespace-pre-wrap">
-          {question?.question_text}
-        </p>
+      <div className="mx-auto w-full max-w-2xl flex-1 px-6 py-10">
+        <Card className={`mb-6 p-6 transition-colors ${urgent ? "border-danger-border" : ""}`}>
+          <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <Clock3 size={13} />
+            Answer this scenario in your own words — plain text only.
+          </div>
+          <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">{question?.question_text}</p>
+        </Card>
 
-        <textarea
+        <Textarea
           value={answer}
           onChange={(e) => setAnswer(e.target.value)}
-          onPaste={() => {
-            pasteDetectedRef.current = true;
-          }}
+          onPaste={() => { pasteDetectedRef.current = true; }}
           disabled={stage === "submitting"}
           placeholder="Write your response here…"
           rows={10}
-          className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 disabled:opacity-50 resize-none"
         />
+        <div className="mt-1.5 flex justify-end">
+          <span className="text-xs text-muted-foreground">{wordCount} word{wordCount !== 1 ? "s" : ""}</span>
+        </div>
 
-        <button
-          onClick={submit}
-          disabled={stage === "submitting" || !answer.trim()}
-          className="mt-6 w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-semibold py-3 rounded-lg text-sm transition-colors"
-        >
-          {stage === "submitting" ? "Submitting…" : "Submit answer"}
-        </button>
+        <Button className="mt-4 w-full" size="lg" loading={stage === "submitting"} disabled={!answer.trim()} onClick={submit}>
+          Submit answer
+        </Button>
       </div>
     </div>
   );

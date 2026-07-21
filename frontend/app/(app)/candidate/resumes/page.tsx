@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Upload } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
 import ResumeUpload from "@/components/ResumeUpload";
-import ExtractionDetailModal from "@/components/ExtractionDetailModal";
+import ResumeCard from "@/components/ResumeCard";
+import ResumeDetailModal from "@/components/ResumeDetailModal";
+import { PageHeader, Card, Button, SkeletonCard, useToast } from "@/components/ui";
 
 interface ResumeVersion {
   id: string;
@@ -13,15 +16,6 @@ interface ResumeVersion {
   label: string | null;
   created_at: string;
   is_current: boolean;
-  has_embedding: boolean;
-}
-
-interface ResumeDetail {
-  id: string;
-  version_number: number;
-  label: string | null;
-  categories: string[] | null;
-  parsed_data: Record<string, any> | null;
   has_embedding: boolean;
 }
 
@@ -34,16 +28,12 @@ export default function ResumesPage() {
 }
 
 function ResumesContent() {
+  const { toast } = useToast();
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editLabel, setEditLabel] = useState("");
-  const [busyId, setBusyId] = useState<string | null>(null);
   const [showUpload, setShowUpload] = useState(false);
-  const [retryingId, setRetryingId] = useState<string | null>(null);
-  const [detailFor, setDetailFor] = useState<ResumeDetail | null>(null);
-  const [loadingDetail, setLoadingDetail] = useState<string | null>(null);
+  const [selected, setSelected] = useState<ResumeVersion | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -63,246 +53,78 @@ function ResumesContent() {
     load();
   }, []);
 
-  const startEdit = (rv: ResumeVersion) => {
-    setEditingId(rv.id);
-    setEditLabel(rv.label ?? `Version ${rv.version_number}`);
+  const handleUpdated = (id: string, patch: Partial<ResumeVersion>) => {
+    setVersions((prev) => {
+      const next = prev.map((v) => (v.id === id ? { ...v, ...patch } : v));
+      // If this version became active, deactivate the rest locally.
+      if (patch.is_current) return next.map((v) => (v.id === id ? v : { ...v, is_current: false }));
+      return next;
+    });
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
   };
 
-  const saveLabel = async (id: string) => {
-    if (!editLabel.trim()) return;
-    setBusyId(id);
-    try {
-      const res = await apiFetch(`/resumes/${id}`, {
-        method: "PATCH",
-        body: JSON.stringify({ label: editLabel.trim() }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to rename");
-      setVersions((prev) => prev.map((v) => (v.id === id ? data : v)));
-      setEditingId(null);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setBusyId(null);
-    }
+  const handleDeleted = (id: string) => {
+    setVersions((prev) => prev.filter((v) => v.id !== id));
+    setSelected(null);
+    toast({ title: "Resume deleted", variant: "success" });
   };
-
-  const setCurrent = async (id: string) => {
-    setBusyId(id);
-    try {
-      const res = await apiFetch(`/resumes/${id}/set-current`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to activate resume");
-      setVersions((prev) =>
-        prev.map((v) => ({ ...v, is_current: v.id === id })),
-      );
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const retryEmbedding = async (id: string) => {
-    setRetryingId(id);
-    try {
-      const res = await apiFetch(`/resumes/${id}/reprocess`, {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to reprocess resume");
-      setVersions((prev) => prev.map((v) => (v.id === id ? data : v)));
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setRetryingId(null);
-    }
-  };
-
-  const remove = async (id: string) => {
-    if (!confirm("Delete this resume version? This can't be undone.")) return;
-    setBusyId(id);
-    try {
-      const res = await apiFetch(`/resumes/${id}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.detail ?? "Failed to delete");
-      }
-      setVersions((prev) => prev.filter((v) => v.id !== id));
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const viewDetails = async (id: string) => {
-    setLoadingDetail(id);
-    try {
-      const res = await apiFetch(`/resumes/${id}/details`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to load details");
-      setDetailFor(data);
-    } catch (e: any) {
-      alert(e.message);
-    } finally {
-      setLoadingDetail(null);
-    }
-  };
-
-  if (loading)
-    return (
-      <div className="p-8 text-gray-400 text-sm animate-pulse">
-        Loading resumes…
-      </div>
-    );
 
   return (
-    <div className="max-w-2xl mx-auto p-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900">My Resumes</h1>
-        <button
-          onClick={() => setShowUpload((v) => !v)}
-          className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-        >
-          {showUpload ? "Cancel" : "Upload new"}
-        </button>
-      </div>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title="My resumes"
+        description="Upload versions, pick your active resume, and see how each one was parsed"
+        actions={
+          <Button size="sm" onClick={() => setShowUpload((v) => !v)}>
+            {showUpload ? "Cancel" : "Upload new"}
+          </Button>
+        }
+      />
 
-      {error && (
-        <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-          {error}
-        </div>
-      )}
-
-      {showUpload && (
-        <div className="mb-6 border border-gray-200 rounded-xl p-5 bg-white">
-          <ResumeUpload
-            onUploaded={() => {
-              setShowUpload(false);
-              load();
-            }}
-          />
-        </div>
-      )}
-
-      {versions.length === 0 && !showUpload && (
-        <p className="text-gray-400 text-sm text-center py-12">
-          No resumes uploaded yet.
-        </p>
-      )}
-
-      <div className="space-y-3">
-        {versions.map((rv) => (
-          <div
-            key={rv.id}
-            className="border border-gray-200 rounded-xl p-4 bg-white flex items-center justify-between gap-4"
-          >
-            <div className="min-w-0 flex-1">
-              {editingId === rv.id ? (
-                <div className="flex items-center gap-2">
-                  <input
-                    value={editLabel}
-                    onChange={(e) => setEditLabel(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm flex-1"
-                    autoFocus
-                  />
-                  <button
-                    onClick={() => saveLabel(rv.id)}
-                    disabled={busyId === rv.id}
-                    className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingId(null)}
-                    className="text-xs text-gray-500 px-2"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {rv.label ?? `Version ${rv.version_number}`}
-                  </p>
-                  {rv.is_current && (
-                    <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                      Active
-                    </span>
-                  )}
-                  {!rv.has_embedding && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-medium shrink-0">
-                      No embedding — matching disabled
-                    </span>
-                  )}
-                </div>
-              )}
-              <p className="text-xs text-gray-400 mt-0.5 truncate">
-                {new Date(rv.created_at).toLocaleDateString()} ·{" "}
-                {rv.s3_key.split("/").pop()}
-              </p>
-            </div>
-
-            {editingId !== rv.id && (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => viewDetails(rv.id)}
-                  disabled={loadingDetail === rv.id}
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-medium disabled:opacity-50"
-                >
-                  {loadingDetail === rv.id ? "Loading…" : "View details"}
-                </button>
-                <button
-                  onClick={() => retryEmbedding(rv.id)}
-                  disabled={retryingId === rv.id}
-                  className="text-xs text-purple-600 hover:text-purple-700 font-medium disabled:opacity-50"
-                >
-                  {retryingId === rv.id
-                    ? "Re-processing…"
-                    : "Re-parse & re-embed"}
-                </button>
-                {!rv.is_current && (
-                  <button
-                    onClick={() => setCurrent(rv.id)}
-                    disabled={busyId === rv.id}
-                    className="text-xs text-blue-600 hover:text-blue-700 font-medium"
-                  >
-                    Set active
-                  </button>
-                )}
-                <button
-                  onClick={() => startEdit(rv)}
-                  className="text-xs text-gray-500 hover:text-gray-700"
-                >
-                  Rename
-                </button>
-                <button
-                  onClick={() => remove(rv.id)}
-                  disabled={busyId === rv.id || rv.is_current}
-                  className="text-xs text-red-500 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed"
-                  title={
-                    rv.is_current
-                      ? "Set another resume as active first"
-                      : undefined
-                  }
-                >
-                  Delete
-                </button>
-              </div>
-            )}
+      <div className="space-y-6 p-6">
+        {error && (
+          <div className="rounded-lg border border-danger-border bg-danger-bg px-4 py-3 text-sm text-danger-foreground">
+            {error}
           </div>
-        ))}
+        )}
+
+        {showUpload && (
+          <Card className="p-5">
+            <ResumeUpload onUploaded={() => { setShowUpload(false); load(); }} />
+          </Card>
+        )}
+
+        {loading && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        )}
+
+        {!loading && versions.length === 0 && !showUpload && (
+          <Card className="p-10 text-center">
+            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+              <Upload size={18} />
+            </div>
+            <p className="mb-3 text-sm text-muted-foreground">No resumes uploaded yet.</p>
+            <Button size="sm" onClick={() => setShowUpload(true)}>Upload your first resume</Button>
+          </Card>
+        )}
+
+        {!loading && versions.length > 0 && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {versions.map((rv) => (
+              <ResumeCard key={rv.id} version={rv} onClick={() => setSelected(rv)} />
+            ))}
+          </div>
+        )}
       </div>
-      {detailFor && (
-        <ExtractionDetailModal
-          title={detailFor.label ?? `Version ${detailFor.version_number}`}
-          categories={detailFor.categories}
-          parsedData={detailFor.parsed_data}
-          hasEmbedding={detailFor.has_embedding}
-          onClose={() => setDetailFor(null)}
+
+      {selected && (
+        <ResumeDetailModal
+          version={selected}
+          onClose={() => setSelected(null)}
+          onUpdated={(patch) => handleUpdated(selected.id, patch)}
+          onDeleted={() => handleDeleted(selected.id)}
         />
       )}
     </div>

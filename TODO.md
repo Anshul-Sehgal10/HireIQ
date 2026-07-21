@@ -13,8 +13,10 @@ each agent gives the user the content to paste in.
 
 The Todos for the user, ai model ignore this section
 
-- [ ] make the pipeline_services file in the backend
+- [Done] make the pipeline_services file in the backend
 - [ ] test the pipeline flow
+- [ ] The candidate cannot withdraw his application
+- [ ] Scenario test should start right after you click "Start scenario" right now it jsut takes you to job feed then you click the application again and proceed to the test
 
 ## Bugs
 
@@ -35,7 +37,7 @@ Frontend agent fix these bugs, Backend agents report frontend bugs here:
 Backend agent implement these features, Frontend agents report backend features here:
 
 - [Later] Local user → can link a Google/LinkedIn account
-- [ ] Can't apply for job until scenario (if enabled) is completed
+- [ ] Make it so the candidate can't apply for job until scenario (if enabled) is completed.
 - [ ] Admin platform-analytics endpoint — needed to build out the real Admin
       Control Center per the PRD (org verification queue, token usage by org,
       platform-wide pipeline funnel, rejection rates). No aggregate admin
@@ -80,6 +82,16 @@ Frontend agent implement these features, Backend agents report frontend features
 ## Any Note by the agent
 
 ### Note By Frontend Agent (if any)
+
+### Note By Frontend Agent (if any)
+
+Backend change made this round (small, additive — flagging per project protocol even though the user explicitly authorized it):
+- `backend/app/db/models/job.py`: added a `role_summary` @property on `JobPosting` that reads `parsed_data.get("role_summary")` — returns None if extraction hasn't run. No column, migration, or business logic touched.
+- `backend/app/schemas/job.py`: added `role_summary: Optional[str] = None` to `JobResponse`. Every existing route returning `JobResponse`/`JobFeedResponse` now includes it automatically via `from_attributes` — no route code changed.
+- Reason: job feed cards were showing the full raw JD text; now show the LLM's short extracted summary instead, falling back client-side to a truncated description if `role_summary` is null (unprocessed job).
+- Backend agent: please sanity-check this doesn't conflict with anything you have in flight on `JobPosting`/`JobResponse`.
+
+
 
 ### Note By Backend Agent (if any)
 

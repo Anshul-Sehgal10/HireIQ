@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ArrowRight, Inbox } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
-import { Card, CardContent } from "@/components/ui/Card";
-import Badge from "@/components/ui/Badge";
-import { SkeletonCard, SkeletonText } from "@/components/ui/Skeleton";
+import JobDetailModal from "@/components/JobDetailModal";
+import { Card, CardContent, Badge, PageHeader, SkeletonCard, SkeletonText, MatchScoreRing, Button } from "@/components/ui";
 
 interface Overview {
   has_resume: boolean;
@@ -49,10 +49,7 @@ const STATUS_LABELS: Record<string, string> = {
   withdrawn: "Withdrawn",
 };
 
-const STATUS_VARIANT: Record<
-  string,
-  "default" | "success" | "warning" | "danger" | "primary"
-> = {
+const STATUS_VARIANT: Record<string, "default" | "success" | "warning" | "danger" | "primary"> = {
   pending: "default",
   resume_rejected: "danger",
   resume_passed: "primary",
@@ -79,6 +76,7 @@ function DashboardContent() {
   const [applications, setApplications] = useState<ApplicationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -104,12 +102,7 @@ function DashboardContent() {
   const useOverride = async (applicationId: string) => {
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(
-        `/applications/${applicationId}/scenario/override`,
-        {
-          method: "POST",
-        },
-      );
+      const res = await apiFetch(`/applications/${applicationId}/scenario/override`, { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to apply override");
@@ -126,9 +119,7 @@ function DashboardContent() {
     if (!confirm("Withdraw this application? This can't be undone.")) return;
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(`/applications/${applicationId}/withdraw`, {
-        method: "POST",
-      });
+      const res = await apiFetch(`/applications/${applicationId}/withdraw`, { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to withdraw");
@@ -141,173 +132,146 @@ function DashboardContent() {
     }
   };
 
+  const inProgress =
+    (overview?.status_counts["scenario_pending"] ?? 0) +
+    (overview?.status_counts["resume_passed"] ?? 0) +
+    (overview?.status_counts["scenario_submitted"] ?? 0);
+
+  const selectedApplication = applications.find((a) => a.job_id === selectedJobId);
+
   return (
-    <div className="max-w-4xl mx-auto p-8 space-y-8">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <Link
-          href="/candidate/jobs"
-          className="text-sm text-primary hover:text-primary-hover"
-        >
-          Browse jobs →
-        </Link>
-      </div>
+    <div className="mx-auto max-w-4xl">
+      <PageHeader
+        title="Dashboard"
+        description={overview ? `${overview.total_applications} application${overview.total_applications !== 1 ? "s" : ""} tracked` : undefined}
+        actions={
+          <Link href="/candidate/jobs">
+            <Button size="sm" rightIcon={<ArrowRight size={14} />}>Browse jobs</Button>
+          </Link>
+        }
+      />
 
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      ) : (
-        overview && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <StatCard
-              label="Applications"
-              value={overview.total_applications}
-            />
-            <StatCard
-              label="Shortlisted"
-              value={overview.status_counts["shortlisted"] ?? 0}
-            />
-            <StatCard
-              label="In progress"
-              value={
-                (overview.status_counts["scenario_pending"] ?? 0) +
-                (overview.status_counts["resume_passed"] ?? 0) +
-                (overview.status_counts["scenario_submitted"] ?? 0)
-              }
-            />
-            <StatCard
-              label="Overrides left"
-              value={
-                overview.overrides_unlimited
-                  ? "Unlimited"
-                  : `${overview.overrides_remaining}/${overview.override_apps_limit}`
-              }
-            />
+      <div className="space-y-8 p-6">
+        {loading ? (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
           </div>
-        )
-      )}
+        ) : (
+          overview && (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <StatCard label="Applications" value={overview.total_applications} />
+              <StatCard label="Shortlisted" value={overview.status_counts["shortlisted"] ?? 0} />
+              <StatCard label="In progress" value={inProgress} />
+              <StatCard
+                label="Overrides left"
+                value={overview.overrides_unlimited ? "Unlimited" : `${overview.overrides_remaining}/${overview.override_apps_limit}`}
+              />
+            </div>
+          )
+        )}
 
-      {!loading && overview && !overview.has_resume && (
-        <div className="bg-warning-bg border border-warning-border text-warning-foreground px-4 py-3 rounded-lg text-sm">
-          You haven't uploaded a resume yet.{" "}
-          <Link href="/candidate/resumes" className="underline font-medium">
-            Upload one
-          </Link>{" "}
-          to start applying.
-        </div>
-      )}
-
-      <div>
-        <h2 className="text-lg font-semibold text-foreground mb-3">
-          Your applications
-        </h2>
-
-        {loading && (
-          <Card className="p-5">
-            <SkeletonText lines={3} />
+        {!loading && overview && !overview.has_resume && (
+          <Card className="border-warning-border bg-warning-bg p-4">
+            <p className="text-sm text-warning-foreground">
+              You haven't uploaded a resume yet.{" "}
+              <Link href="/candidate/resumes" className="font-medium underline">Upload one</Link> to start applying.
+            </p>
           </Card>
         )}
 
-        {!loading && applications.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground text-sm mb-3">
-              You haven't applied to any jobs yet.
-            </p>
-            <Link
-              href="/candidate/jobs"
-              className="text-sm text-primary hover:text-primary-hover font-medium"
-            >
-              Browse the job feed →
-            </Link>
-          </div>
-        )}
+        <div>
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Your applications</h2>
+          <p className="mb-3 -mt-2 text-xs text-muted-foreground">Click any application to view the full job description.</p>
 
-        <div className="space-y-3">
-          {applications.map((app) => (
-            <Card key={app.id} className="p-4 flex flex-col gap-2">
-              <div className="flex justify-between items-start gap-4">
-                <div>
-                  <p className="font-medium text-foreground">{app.job_title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {app.org_name}
-                  </p>
-                </div>
-                <Badge
-                  variant={STATUS_VARIANT[app.status] ?? "default"}
-                  className="shrink-0"
-                >
-                  {STATUS_LABELS[app.status] ?? app.status}
-                </Badge>
-              </div>
-
-              <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
-                {app.match_score != null && (
-                  <span>
-                    Resume match: {Math.round(app.match_score * 100)}%
-                  </span>
-                )}
-                {app.scenario_enabled && app.scenario_score != null && (
-                  <span>
-                    Scenario score: {Math.round(app.scenario_score * 100)}%
-                    {app.scenario_meets_threshold === false && " (below bar)"}
-                  </span>
-                )}
-                {app.is_override && (
-                  <span className="text-warning">Used override</span>
-                )}
-                <span>
-                  Applied {new Date(app.applied_at).toLocaleDateString()}
-                </span>
-              </div>
-
-              {app.scenario_ai_summary && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {app.scenario_ai_summary}
-                </p>
-              )}
-
-              {["shortlisted", "assessment", "interview", "offer"].includes(
-                app.status,
-              ) && (
-                <Link
-                  href={`/candidate/pipeline/${app.id}`}
-                  className="text-xs text-primary hover:text-primary-hover mt-1"
-                >
-                  View pipeline messages →
-                </Link>
-              )}
-
-              {app.status === "scenario_pending" &&
-                app.scenario_meets_threshold === false && (
-                  <div className="flex gap-2 mt-2">
-                    {overview && overview.overrides_remaining > 0 ? (
-                      <button
-                        onClick={() => useOverride(app.id)}
-                        disabled={busyId === app.id}
-                        className="text-xs bg-warning text-white px-3 py-1.5 rounded-lg disabled:opacity-50 hover:brightness-110 transition-all"
-                      >
-                        {busyId === app.id
-                          ? "Submitting…"
-                          : "Use override & submit"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => withdraw(app.id)}
-                        disabled={busyId === app.id}
-                        className="text-xs bg-muted hover:bg-border text-foreground px-3 py-1.5 rounded-lg disabled:opacity-50 transition-colors"
-                      >
-                        Withdraw application
-                      </button>
-                    )}
-                  </div>
-                )}
+          {loading && (
+            <Card className="p-5">
+              <SkeletonText lines={3} />
             </Card>
-          ))}
+          )}
+
+          {!loading && applications.length === 0 && (
+            <Card className="p-10 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
+                <Inbox size={18} />
+              </div>
+              <p className="mb-3 text-sm text-muted-foreground">You haven't applied to any jobs yet.</p>
+              <Link href="/candidate/jobs" className="text-sm font-medium text-primary hover:text-primary-hover">
+                Browse the job feed →
+              </Link>
+            </Card>
+          )}
+
+          <div className="space-y-2.5">
+            {applications.map((app) => {
+              const needsAction = app.status === "scenario_pending" && app.scenario_meets_threshold === false;
+              return (
+                <Card
+                  key={app.id}
+                  interactive
+                  onClick={() => setSelectedJobId(app.job_id)}
+                  className="p-4"
+                >
+                  <div className="flex items-center gap-4">
+                    {app.match_score != null ? (
+                      <MatchScoreRing score={app.match_score} size="sm" />
+                    ) : (
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-dashed border-border text-[10px] text-muted-foreground">
+                        —
+                      </div>
+                    )}
+
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-foreground">{app.job_title}</p>
+                      <p className="truncate text-xs text-muted-foreground">
+                        {app.org_name} · Applied {new Date(app.applied_at).toLocaleDateString()}
+                        {app.is_override && <span className="text-warning"> · override used</span>}
+                      </p>
+                    </div>
+
+                    <Badge variant={STATUS_VARIANT[app.status] ?? "default"} className="shrink-0">
+                      {STATUS_LABELS[app.status] ?? app.status}
+                    </Badge>
+                  </div>
+
+                  {["shortlisted", "assessment", "interview", "offer"].includes(app.status) && (
+                    <Link
+                      href={`/candidate/pipeline/${app.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-2 inline-block text-xs text-primary hover:text-primary-hover"
+                    >
+                      View pipeline messages →
+                    </Link>
+                  )}
+
+                  {needsAction && (
+                    <div className="mt-3 flex gap-2 border-t border-border pt-3" onClick={(e) => e.stopPropagation()}>
+                      {overview && overview.overrides_remaining > 0 ? (
+                        <Button size="sm" variant="secondary" loading={busyId === app.id} onClick={() => useOverride(app.id)}>
+                          Use override & submit
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="outline" loading={busyId === app.id} onClick={() => withdraw(app.id)}>
+                          Withdraw application
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+          </div>
         </div>
       </div>
+
+      {selectedJobId && (
+        <JobDetailModal
+          jobId={selectedJobId}
+          resumeVersions={[]}
+          application={selectedApplication as any}
+          onClose={() => setSelectedJobId(null)}
+          onApplied={() => setSelectedJobId(null)}
+        />
+      )}
     </div>
   );
 }
@@ -317,7 +281,7 @@ function StatCard({ label, value }: { label: string; value: string | number }) {
     <Card className="p-4">
       <CardContent className="p-0">
         <p className="text-2xl font-bold text-foreground">{value}</p>
-        <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
       </CardContent>
     </Card>
   );

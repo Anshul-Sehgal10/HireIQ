@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
+import { useTheme } from "@/context/theme";
 import { apiFetch } from "@/lib/api";
-import { useRouter } from "next/navigation";
+import { Sun, Moon, Monitor, Shield, CreditCard, User as UserIcon, KeyRound, LogOut } from "lucide-react";
+import { PageHeader, Card, CardContent, Button, Field, Input, Badge, SkeletonText, useToast } from "@/components/ui";
 
 interface ProfileData {
   id: string;
@@ -14,30 +16,39 @@ interface ProfileData {
   oauth_provider: string;
 }
 
+interface CandidateOverview {
+  subscription_tier: string;
+  override_apps_used: number;
+  override_apps_limit: number;
+  overrides_remaining: number;
+  overrides_unlimited: boolean;
+}
+
+interface OrgSummary {
+  name: string;
+  verification_status: string;
+  subscription_tier: string;
+}
+
 export default function ProfilePage() {
-  const { reloadUser } = useAuth();
-  const router = useRouter();
+  const { reloadUser, logout, user } = useAuth();
+  const { toast } = useToast();
+  const { preference, setTheme } = useTheme();
 
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Info form state
+  const [overview, setOverview] = useState<CandidateOverview | null>(null);
+  const [org, setOrg] = useState<OrgSummary | null>(null);
+  const [planLoading, setPlanLoading] = useState(true);
+
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [infoSaving, setInfoSaving] = useState(false);
-  const [infoMsg, setInfoMsg] = useState<{
-    type: "ok" | "err";
-    text: string;
-  } | null>(null);
 
-  // Password form state
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
-  const [pwMsg, setPwMsg] = useState<{
-    type: "ok" | "err";
-    text: string;
-  } | null>(null);
 
   useEffect(() => {
     apiFetch("/auth/me")
@@ -50,21 +61,35 @@ export default function ProfilePage() {
       });
   }, []);
 
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      setPlanLoading(true);
+      try {
+        if (user.role === "candidate") {
+          const res = await apiFetch("/candidates/me/overview");
+          if (res.ok) setOverview(await res.json());
+        } else if (user.role === "employer") {
+          const res = await apiFetch("/orgs/mine");
+          if (res.ok) setOrg(await res.json());
+        }
+      } finally {
+        setPlanLoading(false);
+      }
+    })();
+  }, [user]);
+
   const saveInfo = async () => {
     setInfoSaving(true);
-    setInfoMsg(null);
     try {
-      const res = await apiFetch("/auth/me", {
-        method: "PATCH",
-        body: JSON.stringify({ full_name: fullName, email }),
-      });
+      const res = await apiFetch("/auth/me", { method: "PATCH", body: JSON.stringify({ full_name: fullName, email }) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Update failed");
       setProfile((prev) => (prev ? { ...prev, ...data } : prev));
-      reloadUser(); // re-read cookie since tokens were re-issued
-      setInfoMsg({ type: "ok", text: "Profile updated." });
+      reloadUser();
+      toast({ title: "Profile updated", variant: "success" });
     } catch (e: any) {
-      setInfoMsg({ type: "err", text: e.message });
+      toast({ title: "Failed to update profile", description: e.message, variant: "error" });
     } finally {
       setInfoSaving(false);
     }
@@ -73,174 +98,163 @@ export default function ProfilePage() {
   const savePassword = async () => {
     if (!newPassword) return;
     setPwSaving(true);
-    setPwMsg(null);
     try {
       const body: Record<string, string> = { new_password: newPassword };
       if (profile?.has_password) body.current_password = currentPassword;
-
-      const res = await apiFetch("/auth/me", {
-        method: "PATCH",
-        body: JSON.stringify(body),
-      });
+      const res = await apiFetch("/auth/me", { method: "PATCH", body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Password update failed");
       setProfile((prev) => (prev ? { ...prev, has_password: true } : prev));
       setCurrentPassword("");
       setNewPassword("");
-      setPwMsg({
-        type: "ok",
-        text: profile?.has_password
-          ? "Password changed."
-          : "Password set. You can now log in with email too.",
-      });
+      toast({ title: profile?.has_password ? "Password changed" : "Password set", variant: "success" });
     } catch (e: any) {
-      setPwMsg({ type: "err", text: e.message });
+      toast({ title: "Failed to update password", description: e.message, variant: "error" });
     } finally {
       setPwSaving(false);
     }
   };
 
-  if (loading)
+  if (loading || !profile) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
-        <p className="text-slate-400 text-sm animate-pulse">Loading profile…</p>
+      <div className="mx-auto max-w-2xl p-8">
+        <SkeletonText lines={6} />
       </div>
     );
-
-  if (!profile) return null;
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <div className="max-w-2xl mx-auto px-6 py-10 space-y-8">
-        <h1 className="text-2xl font-bold text-white">Profile</h1>
+    <div className="mx-auto max-w-2xl">
+      <PageHeader title="Settings" description="Manage your account, appearance, and plan" />
 
-        {/* Basic info */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-            Basic info
-          </h2>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">
-              Full name
-            </label>
-            <input
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={profile.oauth_provider !== "local"}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed"
-            />
-            {profile.oauth_provider !== "local" && (
-              <p className="text-xs text-slate-500 mt-1">
-                Email is managed by{" "}
-                {profile.oauth_provider.charAt(0).toUpperCase() +
-                  profile.oauth_provider.slice(1)}{" "}
-                and cannot be changed here.
-              </p>
-            )}
-          </div>
-          {infoMsg && (
-            <p
-              className={`text-sm ${infoMsg.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
-            >
-              {infoMsg.text}
-            </p>
-          )}
-          <button
-            onClick={saveInfo}
-            disabled={infoSaving}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
+      <div className="space-y-6 p-6">
+        <SectionCard icon={UserIcon} title="Basic info">
+          <Field label="Full name" htmlFor="full_name">
+            <Input id="full_name" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+          </Field>
+          <Field
+            label="Email"
+            htmlFor="email"
+            hint={profile.oauth_provider !== "local" ? `Managed by ${profile.oauth_provider} — cannot be changed here.` : undefined}
           >
-            {infoSaving ? "Saving…" : "Save changes"}
-          </button>
-        </section>
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={profile.oauth_provider !== "local"} />
+          </Field>
+          <Button size="sm" loading={infoSaving} onClick={saveInfo}>Save changes</Button>
+        </SectionCard>
 
-        {/* Password */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-            {profile.has_password ? "Change password" : "Set a password"}
-          </h2>
+        <SectionCard icon={KeyRound} title={profile.has_password ? "Change password" : "Set a password"}>
           {!profile.has_password && (
-            <p className="text-xs text-slate-400">
-              You signed up with {profile.oauth_provider}. Setting a password
-              lets you also log in with email.
+            <p className="text-xs text-muted-foreground">
+              You signed up with {profile.oauth_provider}. Setting a password lets you also log in with email.
             </p>
           )}
           {profile.has_password && (
-            <div>
-              <label className="block text-xs text-slate-400 mb-1">
-                Current password
-              </label>
-              <input
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-              />
-            </div>
+            <Field label="Current password" htmlFor="current_password">
+              <Input id="current_password" type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
+            </Field>
           )}
-          <div>
-            <label className="block text-xs text-slate-400 mb-1">
-              {profile.has_password ? "New password" : "Password"}
-            </label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-            />
-          </div>
-          {pwMsg && (
-            <p
-              className={`text-sm ${pwMsg.type === "ok" ? "text-emerald-400" : "text-red-400"}`}
-            >
-              {pwMsg.text}
-            </p>
-          )}
-          <button
-            onClick={savePassword}
-            disabled={pwSaving || !newPassword}
-            className="bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors"
-          >
-            {pwSaving
-              ? "Saving…"
-              : profile.has_password
-                ? "Change password"
-                : "Set password"}
-          </button>
-        </section>
+          <Field label={profile.has_password ? "New password" : "Password"} htmlFor="new_password">
+            <Input id="new_password" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          </Field>
+          <Button size="sm" loading={pwSaving} disabled={!newPassword} onClick={savePassword}>
+            {profile.has_password ? "Change password" : "Set password"}
+          </Button>
+        </SectionCard>
 
-        {/* Account info — read only */}
-        <section className="bg-slate-900 border border-slate-800 rounded-xl p-6 space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-500">
-            Account
-          </h2>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Role</span>
-            <span className="text-white capitalize">{profile.role}</span>
+        <SectionCard icon={Sun} title="Appearance">
+          <p className="mb-1 text-xs text-muted-foreground">Choose how HireIQ looks on this device.</p>
+          <div className="flex gap-2">
+            <ThemeOption active={preference === "light"} icon={Sun} label="Light" onClick={() => setTheme("light")} />
+            <ThemeOption active={preference === "dark"} icon={Moon} label="Dark" onClick={() => setTheme("dark")} />
+            <ThemeOption active={preference === "system"} icon={Monitor} label="System" onClick={() => setTheme("system")} />
           </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">Account created via</span>
-            <span className="text-white capitalize">
-              {profile.oauth_provider}
-            </span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-slate-400">User ID</span>
-            <code className="text-xs text-slate-500 font-mono">
-              {profile.id}
-            </code>
-          </div>
-        </section>
+        </SectionCard>
+
+        {(user?.role === "candidate" || user?.role === "employer") && (
+          <SectionCard icon={CreditCard} title="Plan & usage">
+            {planLoading ? (
+              <SkeletonText lines={2} />
+            ) : user?.role === "candidate" && overview ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Current plan</span>
+                  <Badge variant="primary" className="capitalize">{overview.subscription_tier}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Override applications</span>
+                  <span className="text-sm font-medium text-foreground">
+                    {overview.overrides_unlimited ? "Unlimited" : `${overview.overrides_remaining} / ${overview.override_apps_limit} left`}
+                  </span>
+                </div>
+              </div>
+            ) : user?.role === "employer" && org ? (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Organisation plan</span>
+                  <Badge variant="primary" className="capitalize">{org.subscription_tier}</Badge>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Verification status</span>
+                  <Badge variant={org.verification_status === "verified" ? "success" : "warning"} className="capitalize">
+                    {org.verification_status}
+                  </Badge>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No organisation set up yet.</p>
+            )}
+          </SectionCard>
+        )}
+
+        <SectionCard icon={Shield} title="Account">
+          <InfoRow label="Role" value={profile.role} capitalize />
+          <InfoRow label="Signed in with" value={profile.oauth_provider} capitalize />
+          <InfoRow label="User ID" value={profile.id} mono />
+        </SectionCard>
+
+        <Button variant="outline" leftIcon={<LogOut size={14} />} onClick={logout} className="w-full sm:w-auto">
+          Sign out
+        </Button>
       </div>
+    </div>
+  );
+}
+
+function SectionCard({ icon: Icon, title, children }: { icon: React.ElementType; title: string; children: React.ReactNode }) {
+  return (
+    <Card className="p-6">
+      <CardContent className="space-y-4 p-0">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Icon size={14} />
+          </div>
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+        </div>
+        {children}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ThemeOption({ active, icon: Icon, label, onClick }: { active: boolean; icon: React.ElementType; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex flex-1 flex-col items-center gap-1.5 rounded-lg border px-3 py-3 text-xs font-medium transition-colors ${
+        active ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:border-primary/40"
+      }`}
+    >
+      <Icon size={16} />
+      {label}
+    </button>
+  );
+}
+
+function InfoRow({ label, value, capitalize, mono }: { label: string; value: string; capitalize?: boolean; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={`text-foreground ${capitalize ? "capitalize" : ""} ${mono ? "font-mono text-xs text-muted-foreground" : ""}`}>{value}</span>
     </div>
   );
 }

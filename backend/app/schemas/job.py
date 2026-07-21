@@ -46,6 +46,7 @@ class JobResponse(BaseModel):
     categories: Optional[list[str]] = None
     scenario_score_threshold: float
     org_name: Optional[str] = None
+    role_summary: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

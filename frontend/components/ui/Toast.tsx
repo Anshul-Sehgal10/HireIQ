@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CheckCircle2, XCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -45,11 +45,15 @@ const ICON_CLASSES: Record<ToastVariant, string> = {
   info: "text-primary",
 };
 
-/** Replaces raw alert() calls (ResumesPage, EmployerJobsPage,
- *  EmployerJobDetailModal, etc.) — wire in progressively during later steps. */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // Portal must not render on the same pass that hydrates the server HTML —
+  // gating on a mounted flag (flipped post-hydration) instead of
+  // `typeof document !== "undefined"` avoids a client/server render mismatch.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const dismiss = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
@@ -69,10 +73,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ toast }}>
       {children}
-      {typeof document !== "undefined" &&
+      {mounted &&
         createPortal(
-          // Fix hydration error here
-          <div suppressHydrationWarning={true} className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-full max-w-sm flex-col gap-2">
+          <div className="pointer-events-none fixed bottom-4 right-4 z-100 flex w-full max-w-sm flex-col gap-2">
             {toasts.map((t) => {
               const Icon = ICONS[t.variant];
               return (
