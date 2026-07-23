@@ -543,6 +543,10 @@ function JobFeed() {
             setApplications((prev) => [...prev, application] as any);
             setDetailJobId(null);
           }}
+          onWithdrawn={(jobId) => {
+            handleWithdraw(jobId);
+            setDetailJobId(null);
+          }}
         />
       )}
     </div>

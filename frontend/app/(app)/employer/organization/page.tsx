@@ -197,7 +197,45 @@ function OrgContent() {
           Job postings
         </Link>
       </header>
-
+      {org.verification_status !== "verified" && (
+        <div className="mx-auto max-w-5xl px-6 pt-6">
+          <div
+            className={`rounded-xl border px-5 py-4 text-sm ${
+              org.verification_status === "pending"
+                ? "border-warning-border bg-warning-bg text-warning-foreground"
+                : "border-danger-border bg-danger-bg text-danger-foreground"
+            }`}
+          >
+            {org.verification_status === "pending" && (
+              <p>
+                <strong>Verification pending.</strong> You can set up your
+                organisation and draft postings, but you won't be able to
+                publish jobs until an admin verifies your organisation.
+              </p>
+            )}
+            {org.verification_status === "rejected" && (
+              <p>
+                <strong>Verification rejected.</strong> This organisation can't
+                publish jobs. You can{" "}
+                <Link
+                  href="/employer/organization/setup"
+                  className="font-medium underline"
+                >
+                  create a new organisation
+                </Link>{" "}
+                to start over.
+              </p>
+            )}
+            {org.verification_status === "blocked" && (
+              <p>
+                <strong>Organisation blocked.</strong> All published jobs have
+                been closed and new publishing is disabled. Contact support if
+                you believe this is a mistake.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
       <div className="max-w-5xl mx-auto px-6 py-10 space-y-10">
         {/* Members */}
         <section>
@@ -268,7 +306,9 @@ function OrgContent() {
                 />
                 <select
                   value={inviteRole}
-                  onChange={(e) => setInviteRole(e.target.value as "recruiter" | "viewer")}
+                  onChange={(e) =>
+                    setInviteRole(e.target.value as "recruiter" | "viewer")
+                  }
                   className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                 >
                   <option value="recruiter">Recruiter</option>

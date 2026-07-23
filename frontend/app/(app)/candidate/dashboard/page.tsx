@@ -270,6 +270,7 @@ function DashboardContent() {
           application={selectedApplication as any}
           onClose={() => setSelectedJobId(null)}
           onApplied={() => setSelectedJobId(null)}
+          onWithdrawn={() => load()}
         />
       )}
     </div>
