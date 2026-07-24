@@ -17,6 +17,11 @@ The Todos for the user, ai model ignore this section
 - [ ] test the pipeline flow
 - [ ] The candidate cannot withdraw his application
 - [ ] Scenario test should start right after you click "Start scenario" right now it jsut takes you to job feed then you click the application again and proceed to the test
+- [ ] If the token is invalid or expired, redirect to login page instead of showing empty dashboard
+- [ ] on org request page, if the user already have an org, redirect to his org page
+- [ ] blocked members can't login, when unblocking an org, should it unblock the org members asw? or manual
+- [ ] Remove the exceptions page (onboarding/select-role) to "(public)", no need to add it in "(app)" and create an exception for it in "proxy.ts"
+- [ ] Why is the role nullable? if an oauth user registers 1st time, just show him the select-role page (which is public) and ask for his role, when he gives the role then only issue the jwts, no need to make it null, if by chance the role is null, just show the select-role page to get a role (employer/candidate)
 
 ## Bugs
 

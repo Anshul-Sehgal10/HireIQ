@@ -22,6 +22,7 @@ from .user import (
     User,
     UserRole,
 )
+from .oauth_account import OAuthAccount
 
 __all__ = [
     "Base",
@@ -29,6 +30,7 @@ __all__ = [
     "User",
     "UserRole",
     "OAuthProvider",
+    "OAuthAccount",
     "Organization",
     "VerificationStatus",
     "SubscriptionTier",

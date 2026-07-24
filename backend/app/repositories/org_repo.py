@@ -26,7 +26,8 @@ async def create_org(
     name: str,
     domain: Optional[str] = None,
 ) -> Organization:
-    org = Organization(owner_id=owner_id, name=name, domain=domain)
+    join_code = await _unique_join_code(db)
+    org = Organization(owner_id=owner_id, name=name, domain=domain, join_code=join_code)
     db.add(org)
     await db.flush()  # get org.id before adding the member row
 
@@ -94,6 +95,21 @@ async def remove_member(
     await db.delete(member)
     await db.commit()
     return True
+
+
+async def regenerate_join_code(db: AsyncSession, org: Organization) -> Organization:
+    org.join_code = await _unique_join_code(db)
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
+async def get_org_by_join_code(db: AsyncSession, code: str) -> Optional[Organization]:
+    normalized = code.strip().upper()
+    result = await db.execute(
+        select(Organization).where(Organization.join_code == normalized)
+    )
+    return result.scalar_one_or_none()
 
 
 # ---------------------------------------------------------------------------
@@ -246,3 +262,27 @@ async def reject_request(db: AsyncSession, request: OrgInvite) -> OrgInvite:
     await db.commit()
     await db.refresh(request)
     return request
+
+
+# ---------------------------------------------------------------------------
+# Join Codes
+# ---------------------------------------------------------------------------
+
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I
+CODE_LENGTH = 8
+
+def _generate_join_code() -> str:
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
+
+
+async def _unique_join_code(db: AsyncSession) -> str:
+    """Retries on collision — astronomically unlikely at this code space
+    (33^8) but cheap to guard against instead of trusting probability."""
+    for _ in range(10):
+        code = _generate_join_code()
+        result = await db.execute(
+            select(Organization).where(Organization.join_code == code)
+        )
+        if result.scalar_one_or_none() is None:
+            return code
+    raise RuntimeError("Failed to generate a unique join code after 10 attempts")

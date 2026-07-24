@@ -31,6 +31,11 @@ const ROLE_ROUTES: Record<string, string[]> = {
   // "/apply":               ["candidate"],
 };
 
+// Remove Later: Todo for ref
+// Reachable by any authenticated user regardless of role — the post-OAuth-
+// signup role-selection step, since the user has no role yet at this point.
+const NO_ROLE_REQUIRED_ROUTES = ["/onboarding/select-role"];
+
 /** Safely decodes a JWT payload. Returns null on any error. */
 function safeDecodeJWT(token: string): Record<string, unknown> | null {
   try {
@@ -53,15 +58,42 @@ function decodeRole(token: string): string | null {
   return typeof payload.role === "string" ? payload.role.toLowerCase() : null;
 }
 
+// export function proxy(req: NextRequest) {
+//   const { pathname } = req.nextUrl;
+
+//   const matchedRoute = Object.keys(ROLE_ROUTES).find(
+//     (r) => pathname === r || pathname.startsWith(r + "/"),
+//   );
+//   if (!matchedRoute) return NextResponse.next();
+
+//   const token = req.cookies.get("access_token")?.value;
+//   if (!token) {
+//     return NextResponse.redirect(new URL("/auth/login", req.url));
+//   }
+
+//   const role = decodeRole(token);
+//   if (!role || !ROLE_ROUTES[matchedRoute].includes(role)) {
+//     return NextResponse.redirect(new URL("/auth/login", req.url));
+//   }
+
+//   return NextResponse.next();
+// }
+
+// Remove Later: Todo for ref
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const token = req.cookies.get("access_token")?.value;
+
+  if (NO_ROLE_REQUIRED_ROUTES.some((r) => pathname === r || pathname.startsWith(r + "/"))) {
+    if (!token) return NextResponse.redirect(new URL("/auth/login", req.url));
+    return NextResponse.next();
+  }
 
   const matchedRoute = Object.keys(ROLE_ROUTES).find(
     (r) => pathname === r || pathname.startsWith(r + "/"),
   );
   if (!matchedRoute) return NextResponse.next();
 
-  const token = req.cookies.get("access_token")?.value;
   if (!token) {
     return NextResponse.redirect(new URL("/auth/login", req.url));
   }

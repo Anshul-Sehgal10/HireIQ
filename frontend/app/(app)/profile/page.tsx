@@ -3,17 +3,23 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/context/auth";
 import { useTheme } from "@/context/theme";
-import { apiFetch } from "@/lib/api";
-import { Sun, Moon, Monitor, Shield, CreditCard, User as UserIcon, KeyRound, LogOut } from "lucide-react";
+import { apiFetch, apiUrl } from "@/lib/api";
+import { Sun, Moon, Monitor, Shield, CreditCard, User as UserIcon, KeyRound, LogOut, Link2 } from "lucide-react";
 import { PageHeader, Card, CardContent, Button, Field, Input, Badge, SkeletonText, useToast } from "@/components/ui";
 
 interface ProfileData {
   id: string;
   email: string;
   full_name: string;
-  role: string;
-  has_password: boolean;
-  oauth_provider: string;
+  role: string | null;       // now nullable
+  has_password: boolean;     // oauth_provider field removed
+}
+
+interface LinkedAccount {
+  id: string;
+  provider: "google" | "linkedin";
+  provider_email: string;
+  created_at: string;
 }
 
 interface CandidateOverview {
@@ -50,6 +56,10 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [pwSaving, setPwSaving] = useState(false);
 
+  const [accounts, setAccounts] = useState<LinkedAccount[]>([]);
+const [accountsLoading, setAccountsLoading] = useState(true);
+const [unlinkingId, setUnlinkingId] = useState<string | null>(null);
+
   useEffect(() => {
     apiFetch("/auth/me")
       .then((r) => r.json())
@@ -78,6 +88,13 @@ export default function ProfilePage() {
       }
     })();
   }, [user]);
+
+  useEffect(() => {
+  apiFetch("/auth/me/oauth-accounts")
+    .then((r) => (r.ok ? r.json() : []))
+    .then((data) => setAccounts(Array.isArray(data) ? data : []))
+    .finally(() => setAccountsLoading(false));
+}, []);
 
   const saveInfo = async () => {
     setInfoSaving(true);
@@ -115,6 +132,28 @@ export default function ProfilePage() {
     }
   };
 
+  const connect = (provider: "google" | "linkedin") => {
+  window.location.href = apiUrl(`/auth/${provider}/connect`);
+};
+
+const unlink = async (accountId: string) => {
+  if (!confirm("Unlink this account? You'll no longer be able to sign in with it.")) return;
+  setUnlinkingId(accountId);
+  try {
+    const res = await apiFetch(`/auth/oauth-accounts/${accountId}`, { method: "DELETE" });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.detail ?? "Failed to unlink account");
+    }
+    setAccounts((prev) => prev.filter((a) => a.id !== accountId));
+    toast({ title: "Account unlinked", variant: "success" });
+  } catch (e: any) {
+    toast({ title: "Failed to unlink", description: e.message, variant: "error" });
+  } finally {
+    setUnlinkingId(null);
+  }
+};
+
   if (loading || !profile) {
     return (
       <div className="mx-auto max-w-2xl p-8">
@@ -135,9 +174,9 @@ export default function ProfilePage() {
           <Field
             label="Email"
             htmlFor="email"
-            hint={profile.oauth_provider !== "local" ? `Managed by ${profile.oauth_provider} — cannot be changed here.` : undefined}
+            hint={!profile.has_password ? "Set a password to edit your email directly — it's otherwise tied to your connected sign-in provider(s)." : undefined}
           >
-            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={profile.oauth_provider !== "local"} />
+            <Input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={!profile.has_password} />
           </Field>
           <Button size="sm" loading={infoSaving} onClick={saveInfo}>Save changes</Button>
         </SectionCard>
@@ -145,7 +184,7 @@ export default function ProfilePage() {
         <SectionCard icon={KeyRound} title={profile.has_password ? "Change password" : "Set a password"}>
           {!profile.has_password && (
             <p className="text-xs text-muted-foreground">
-              You signed up with {profile.oauth_provider}. Setting a password lets you also log in with email.
+              Setting a password lets you also log in with email.
             </p>
           )}
           {profile.has_password && (
@@ -159,6 +198,33 @@ export default function ProfilePage() {
           <Button size="sm" loading={pwSaving} disabled={!newPassword} onClick={savePassword}>
             {profile.has_password ? "Change password" : "Set password"}
           </Button>
+        </SectionCard>
+
+        <SectionCard icon={Link2} title="Connected accounts">
+          {accountsLoading ? (
+            <SkeletonText lines={2} />
+          ) : (
+            <div className="space-y-2">
+              {accounts.map((a) => (
+                <div key={a.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5">
+                  <div>
+                    <p className="text-sm font-medium capitalize text-foreground">{a.provider}</p>
+                    <p className="text-xs text-muted-foreground">{a.provider_email}</p>
+                  </div>
+                  <Button size="sm" variant="outline" loading={unlinkingId === a.id} onClick={() => unlink(a.id)}>
+                    Unlink
+                  </Button>
+                </div>
+              ))}
+              {(["google", "linkedin"] as const)
+                .filter((p) => !accounts.some((a) => a.provider === p))
+                .map((p) => (
+                  <Button key={p} size="sm" variant="secondary" className="w-full capitalize" onClick={() => connect(p)}>
+                    Connect {p}
+                  </Button>
+                ))}
+            </div>
+          )}
         </SectionCard>
 
         <SectionCard icon={Sun} title="Appearance">
@@ -207,8 +273,11 @@ export default function ProfilePage() {
         )}
 
         <SectionCard icon={Shield} title="Account">
-          <InfoRow label="Role" value={profile.role} capitalize />
-          <InfoRow label="Signed in with" value={profile.oauth_provider} capitalize />
+          <InfoRow
+            label="Sign-in methods"
+            value={[profile.has_password ? "Password" : null, ...accounts.map((a) => a.provider)].filter(Boolean).join(", ") || "—"}
+            capitalize
+          />
           <InfoRow label="User ID" value={profile.id} mono />
         </SectionCard>
 

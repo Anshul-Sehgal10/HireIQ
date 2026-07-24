@@ -22,21 +22,25 @@ def hash_password(password: str) -> str:
     """Hashes a plain-text password using Argon2id."""
     return ph.hash(password)
 
-def verify_password(plain: str, hashed: str) -> bool:
-    """Verifies a plain-text password against an Argon2id hash."""
+def verify_password(plain: str, hashed: Optional[str]) -> bool:
+    """Verifies a plain-text password against an Argon2id hash.
+    Returns False (not an exception) for OAuth-only accounts with no
+    password set — was previously an uncaught TypeError."""
+    if not hashed:
+        return False
     try:
         return ph.verify(hashed, plain)
     except VerifyMismatchError:
         return False
 
-def create_access_token(user_id: str, role: str, user_data: dict) -> str:
+def create_access_token(user_id: str, role: Optional[str], user_data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     return jwt.encode(
         {
             "sub": user_id,
-            "role": role,
+            "role": role,          # may be None for a role-less OAuth signup
             "email": user_data["email"],
             "full_name": user_data["full_name"],
             "type": "access",

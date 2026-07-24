@@ -28,7 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models.job import JobPosting, JobStatus
 from app.db.models.organization import Organization, VerificationStatus
 from app.db.models.user import User, UserRole
-from app.repositories import admin_repo
+from app.repositories import admin_repo, org_repo
 
 
 async def _close_published_jobs(db: AsyncSession, org: Organization) -> int:
@@ -43,6 +43,24 @@ async def _close_published_jobs(db: AsyncSession, org: Organization) -> int:
         job.status = JobStatus.CLOSED
     return len(jobs)
 
+
+async def _block_org_members(db: AsyncSession, org: Organization) -> list[uuid.UUID]:
+    """
+    Deactivates every member's User account, not just the org row. Skips
+    accounts that are somehow already inactive (avoids clobbering an
+    independent block reason) and skips ADMIN-role users defensively —
+    org membership shouldn't include admins, but block_user() already
+    forbids blocking admins through the individual endpoint, so this
+    keeps both code paths consistent.
+    """
+    members = await org_repo.list_members(db, org.id)
+    blocked_ids: list[uuid.UUID] = []
+    for member in members:
+        user = await db.get(User, member.user_id)
+        if user and user.role != UserRole.ADMIN and user.is_active:
+            user.is_active = False
+            blocked_ids.append(user.id)
+    return blocked_ids
 
 # ---------------------------------------------------------------------------
 # Organisation moderation
@@ -91,10 +109,16 @@ async def block_org(
     previous_status = org.verification_status.value
     org.verification_status = VerificationStatus.BLOCKED
     closed_count = await _close_published_jobs(db, org)
+    blocked_member_ids = await _block_org_members(db, org)
 
     db.add(admin_repo.build_audit_log(
         admin_id, "org_block", "organization", org.id,
-        {"previous_status": previous_status, "reason": reason, "jobs_closed": closed_count},
+        {
+            "previous_status": previous_status,
+            "reason": reason,
+            "jobs_closed": closed_count,
+            "members_blocked": [str(i) for i in blocked_member_ids],
+        },
     ))
     await db.commit()
     await db.refresh(org)

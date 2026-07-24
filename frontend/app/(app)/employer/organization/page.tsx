@@ -12,6 +12,7 @@ interface Org {
   domain: string | null;
   verification_status: string;
   owner_id: string;
+  join_code: string | null;
 }
 
 interface Member {
@@ -60,6 +61,10 @@ function OrgContent() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
+
+  // Join Code
+  const [regenerating, setRegenerating] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
 
   const currentUserId = (() => {
     try {
@@ -147,6 +152,34 @@ function OrgContent() {
   const rejectRequest = async (id: string) => {
     await apiFetch(`/orgs/mine/requests/${id}/reject`, { method: "POST" });
     setRequests((prev) => prev.filter((r) => r.id !== id));
+  };
+
+  const regenerateCode = async () => {
+    if (
+      !confirm(
+        "Regenerate the join code? The old code will stop working immediately.",
+      )
+    )
+      return;
+    setRegenerating(true);
+    try {
+      const res = await apiFetch("/orgs/mine/regenerate-code", {
+        method: "POST",
+      });
+      const data: Org = await res.json();
+      if (!res.ok)
+        throw new Error((data as any).detail ?? "Failed to regenerate code");
+      setOrg(data);
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const copyCode = () => {
+    if (!org?.join_code) return;
+    navigator.clipboard.writeText(org.join_code);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
   if (loading) {
@@ -406,7 +439,37 @@ function OrgContent() {
           </section>
         )}
 
-        {/* Org ID for sharing */}
+        {/* Join code & org ID — owner only */}
+        {isOwner && org.join_code && (
+          <section className="border-t border-slate-800 pt-8">
+            <p className="text-xs text-slate-600 mb-2 uppercase tracking-widest font-semibold">
+              Join code
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-lg font-mono font-bold text-white tracking-widest select-all">
+                {org.join_code}
+              </span>
+              <button
+                onClick={copyCode}
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+              >
+                {copiedCode ? "Copied!" : "Copy"}
+              </button>
+              <button
+                onClick={regenerateCode}
+                disabled={regenerating}
+                className="text-xs text-slate-500 hover:text-red-400 transition-colors disabled:opacity-50"
+              >
+                {regenerating ? "Regenerating…" : "Regenerate"}
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 mt-1">
+              Share this with colleagues so they can request to join instantly.
+              Regenerating immediately invalidates the old code.
+            </p>
+          </section>
+        )}
+
         <section className="border-t border-slate-800 pt-8">
           <p className="text-xs text-slate-600 mb-1 uppercase tracking-widest font-semibold">
             Organisation ID
@@ -415,7 +478,7 @@ function OrgContent() {
             {org.id}
           </p>
           <p className="text-xs text-slate-600 mt-1">
-            Share this with colleagues who want to send a join request.
+            Fallback for colleagues who don't have the join code.
           </p>
         </section>
       </div>

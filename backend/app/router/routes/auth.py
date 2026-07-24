@@ -6,8 +6,10 @@ profile management, and logout. Cookie handling and JWT generation
 are centralized through helper functions to keep endpoint logic clean.
 """
 
-from typing import Annotated
+import uuid
+from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import CurrentUser, get_db
@@ -17,9 +19,12 @@ from app.core.security import (
     decode_token, hash_password, verify_password,
 )
 from app.db.models import User, UserRole
-from app.db.models.user import OAuthProvider
+from app.repositories import oauth_repo
 from app.repositories.user_repo import get_user_by_email, create_user, get_user_by_id, update_user
-from app.schemas.auth import LoginRequest, RegisterRequest, UpdateProfileRequest
+from app.schemas.auth import (
+    LoginRequest, RegisterRequest, UpdateProfileRequest,
+    SelectRoleRequest, OAuthAccountResponse,
+)
 from jose import JWTError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,6 +67,10 @@ def clear_access_cookie(response: Response):
     """Remove the access token cookie from the client."""
     response.delete_cookie(key="access_token", path="/")
 
+def _role_value(user: User) -> str | None:
+    """user.role is None only for an OAuth signup mid role-selection."""
+    return user.role.value if user.role else None
+
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterRequest,
@@ -85,7 +94,11 @@ async def register(
 
     # Issue tokens immediately — same logic as /login
     user_data = {"email": user.email, "full_name": user.full_name}
-    access_token = create_access_token(str(user.id), user.role.value, user_data)
+    access_token = create_access_token(
+    user_id=str(user.id),
+    role=_role_value(user),
+    user_data=user_data
+    )
     refresh_token = create_refresh_token(str(user.id))
 
     set_refresh_cookie(response, refresh_token)
@@ -114,7 +127,7 @@ async def login(
     # 3. Generate token pairs safely
     access_token = create_access_token(
     user_id=str(user.id),
-    role=user.role.value,
+    role=_role_value(user),
     user_data=user_data
     )
     
@@ -180,7 +193,7 @@ async def refresh(
     # 3. Generate brand new token pair
     new_access_token = create_access_token(
         user_id=str(user.id),
-        role=user.role.value,
+        role=_role_value(user),
         user_data=user_data
     )
 
@@ -205,7 +218,6 @@ async def me(user: CurrentUser):
         "role": user.role,
         "full_name": user.full_name,
         "has_password": user.hashed_password is not None,
-        "oauth_provider": user.oauth_provider,
     }
 
 @router.patch("/me")
@@ -222,12 +234,11 @@ async def update_me(
 
     # --- email ---
     if body.email is not None and body.email.lower() != user.email:
-        # Block email changes for OAuth accounts
-        if user.oauth_provider != OAuthProvider.LOCAL:
+        if not user.hashed_password:
             raise HTTPException(
                 400,
-                f"Your account is linked to {user.oauth_provider.value.title()}. "
-                "Email cannot be changed directly — it is managed by your OAuth provider."
+                "Your account has no password set yet — set one before changing your "
+                "email, since your email is otherwise tied to your connected sign-in provider(s).",
             )
         existing = await get_user_by_email(db, body.email)
         if existing:
@@ -259,7 +270,11 @@ async def update_me(
             "email": updated_user.email,
             "full_name": updated_user.full_name,
         }
-        access_token = create_access_token(str(updated_user.id), updated_user.role.value, user_data)
+        access_token = create_access_token(
+            user_id=str(user.id),
+            role=_role_value(user),
+            user_data=user_data
+        )
         refresh_token = create_refresh_token(str(updated_user.id))
         set_refresh_cookie(response, refresh_token)
         set_access_cookie(response, access_token)
@@ -270,7 +285,6 @@ async def update_me(
         "full_name": updated_user.full_name,
         "role": updated_user.role,
         "has_password": updated_user.hashed_password is not None,
-        "oauth_provider": updated_user.oauth_provider,
     }
 
 
@@ -296,3 +310,77 @@ async def logout(
             # even if decoding fails, still clear the cookies
             response.delete_cookie(key="refresh_token", path="/")
             clear_access_cookie(response)
+
+# ---------------------------------------------------------------------------
+# Role selection — completes an OAuth-only signup
+# ---------------------------------------------------------------------------
+
+@router.post("/select-role")
+async def select_role(
+    body: SelectRoleRequest,
+    response: Response,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if user.role is not None:
+        raise HTTPException(400, "Role has already been set for this account")
+    if body.role == UserRole.ADMIN:
+        raise HTTPException(400, "Cannot self-assign the admin role")
+
+    user.role = body.role
+    await db.commit()
+    await db.refresh(user)
+
+    if body.role == UserRole.CANDIDATE:
+        from app.db.models.candidate_profiles import CandidateProfile
+        existing = await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == user.id)
+        )
+        if not existing.scalar_one_or_none():
+            db.add(CandidateProfile(user_id=user.id))
+            await db.commit()
+
+    user_data = {"email": user.email, "full_name": user.full_name}
+    access_token = create_access_token(
+        user_id=str(user.id),
+        role=_role_value(user),
+        user_data=user_data
+    )
+    refresh_token = create_refresh_token(str(user.id))
+    set_refresh_cookie(response, refresh_token)
+    set_access_cookie(response, access_token)
+
+    return {"id": str(user.id), "role": user.role, "message": "Role set successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Linked OAuth accounts
+# ---------------------------------------------------------------------------
+
+@router.get("/me/oauth-accounts", response_model=List[OAuthAccountResponse])
+async def list_my_oauth_accounts(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    return await oauth_repo.list_for_user(db, user.id)
+
+
+@router.delete("/oauth-accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_oauth_account(
+    account_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    account = await oauth_repo.get_by_id(db, account_id)
+    if not account or account.user_id != user.id:
+        raise HTTPException(404, "Linked account not found")
+
+    remaining = await oauth_repo.list_for_user(db, user.id)
+    if len(remaining) <= 1 and not user.hashed_password:
+        raise HTTPException(
+            400,
+            "Cannot unlink your only sign-in method. Set a password first, "
+            "or connect another provider before unlinking this one.",
+        )
+
+    await oauth_repo.delete(db, account)

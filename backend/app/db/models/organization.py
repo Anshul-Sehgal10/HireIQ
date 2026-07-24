@@ -56,6 +56,11 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     default=VerificationStatus.PENDING,
     server_default="pending",
     )
+
+    join_code: Mapped[Optional[str]] = mapped_column(
+        String(12), unique=True, nullable=True, index=True
+    )
+
     subscription_tier: Mapped[SubscriptionTier] = mapped_column(
     Enum(
         SubscriptionTier,

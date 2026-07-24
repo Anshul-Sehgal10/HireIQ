@@ -14,6 +14,7 @@ import {
   PageHeader,
   SkeletonText,
   useToast,
+  Modal,
 } from "@/components/ui";
 
 interface AdminOrg {
@@ -26,11 +27,21 @@ interface AdminOrg {
   member_count: number;
   published_job_count: number;
 }
+
+interface AdminOrgMember {
+  id: string;
+  user_id: string;
+  role: string;
+  email: string | null;
+  full_name: string | null;
+  is_active: boolean;
+}
+
 interface AdminUser {
   id: string;
   email: string;
   full_name: string;
-  role: string;
+  role: string | null;
   is_active: boolean;
   is_verified: boolean;
 }
@@ -68,6 +79,11 @@ function DashboardContent() {
   const [userQuery, setUserQuery] = useState("");
   const [loadingUsers, setLoadingUsers] = useState(true);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  const [membersOrg, setMembersOrg] = useState<AdminOrg | null>(null);
+  const [members, setMembers] = useState<AdminOrgMember[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [busyMemberId, setBusyMemberId] = useState<string | null>(null);
 
   const loadOrgs = async () => {
     setLoadingOrgs(true);
@@ -151,6 +167,46 @@ function DashboardContent() {
       });
     } finally {
       setBusyUserId(null);
+    }
+  };
+
+  const openMembers = async (org: AdminOrg) => {
+    setMembersOrg(org);
+    setLoadingMembers(true);
+    try {
+      const res = await apiFetch(`/admin/orgs/${org.id}/members`);
+      if (res.ok) setMembers(await res.json());
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const toggleMemberActive = async (member: AdminOrgMember) => {
+    setBusyMemberId(member.user_id);
+    try {
+      const action = member.is_active ? "block" : "unblock";
+      const res = await apiFetch(`/admin/users/${member.user_id}/${action}`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail ?? `Failed to ${action} member`);
+      }
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === member.user_id ? { ...m, is_active: !m.is_active } : m,
+        ),
+      );
+      toast({ title: `Member ${action}ed`, variant: "success" });
+    } catch (e: any) {
+      toast({
+        title: "Failed to update member",
+        description: e.message,
+        variant: "error",
+      });
+    } finally {
+      setBusyMemberId(null);
     }
   };
 
@@ -300,6 +356,13 @@ function DashboardContent() {
                                   Unblock
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => openMembers(org)}
+                              >
+                                Members
+                              </Button>
                             </div>
                           </td>
                         </tr>
@@ -370,7 +433,7 @@ function DashboardContent() {
                             </p>
                           </td>
                           <td className="py-3 pr-4 capitalize text-muted-foreground">
-                            {u.role}
+                            {u.role ?? "pending role"}
                           </td>
                           <td className="py-3 pr-4">
                             <Badge
@@ -410,6 +473,56 @@ function DashboardContent() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {membersOrg && (
+          <Modal
+            open
+            onClose={() => {
+              setMembersOrg(null);
+              setMembers([]);
+            }}
+            title={`Members — ${membersOrg.name}`}
+            size="lg"
+          >
+            {loadingMembers ? (
+              <SkeletonText lines={3} />
+            ) : members.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No members found.</p>
+            ) : (
+              <div className="space-y-2">
+                {members.map((m) => (
+                  <div
+                    key={m.id}
+                    className="flex items-center justify-between rounded-lg border border-border px-4 py-2.5"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {m.full_name ?? "—"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{m.email}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="primary" className="capitalize">
+                        {m.role}
+                      </Badge>
+                      <Badge variant={m.is_active ? "success" : "danger"} dot>
+                        {m.is_active ? "Active" : "Blocked"}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant={m.is_active ? "destructive" : "outline"}
+                        loading={busyMemberId === m.user_id}
+                        onClick={() => toggleMemberActive(m)}
+                      >
+                        {m.is_active ? "Block" : "Unblock"}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Modal>
         )}
       </div>
     </div>

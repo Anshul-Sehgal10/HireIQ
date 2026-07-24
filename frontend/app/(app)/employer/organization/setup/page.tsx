@@ -15,21 +15,30 @@ export default function OrgSetupPage() {
   const [domain, setDomain] = useState("");
 
   // Join org state
+  const [joinCode, setJoinCode] = useState("");
   const [orgId, setOrgId] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleCreate = async () => {
-    if (!orgName.trim()) { setError("Organisation name is required"); return; }
-    setLoading(true); setError(null);
+    if (!orgName.trim()) {
+      setError("Organisation name is required");
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
       const res = await apiFetch("/orgs/", {
         method: "POST",
-        body: JSON.stringify({ name: orgName.trim(), domain: domain.trim() || null }),
+        body: JSON.stringify({
+          name: orgName.trim(),
+          domain: domain.trim() || null,
+        }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to create organisation");
+      if (!res.ok)
+        throw new Error(data.detail ?? "Failed to create organisation");
       router.push("/employer/organization");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "An error occurred");
@@ -38,13 +47,43 @@ export default function OrgSetupPage() {
     }
   };
 
-  const handleRequestJoin = async () => {
-    if (!orgId.trim()) { setError("Organisation ID is required"); return; }
-    setLoading(true); setError(null);
+  const handleJoinByCode = async () => {
+    if (!joinCode.trim()) {
+      setError("Enter the organisation code");
+      return;
+    }
+    setLoading(true);
+    setError(null);
     try {
-      const res = await apiFetch(`/orgs/${orgId.trim()}/requests/`, { method: "POST" });
+      const res = await apiFetch("/orgs/join-by-code", {
+        method: "POST",
+        body: JSON.stringify({ code: joinCode.trim() }),
+      });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail ?? "Failed to send join request");
+      if (!res.ok)
+        throw new Error(data.detail ?? "Failed to join organisation");
+      router.push("/employer/organization/requested");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "An error occurred");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestJoin = async () => {
+    if (!orgId.trim()) {
+      setError("Organisation ID is required");
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiFetch(`/orgs/${orgId.trim()}/requests/`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (!res.ok)
+        throw new Error(data.detail ?? "Failed to send join request");
       router.push("/employer/organization/requested");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "An error occurred");
@@ -65,7 +104,8 @@ export default function OrgSetupPage() {
             Set up your workspace
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Every job posting belongs to an organisation. Create yours or join an existing one.
+            Every job posting belongs to an organisation. Create yours or join
+            an existing one.
           </p>
         </div>
 
@@ -74,7 +114,10 @@ export default function OrgSetupPage() {
           {(["create", "join"] as const).map((t) => (
             <button
               key={t}
-              onClick={() => { setTab(t); setError(null); }}
+              onClick={() => {
+                setTab(t);
+                setError(null);
+              }}
               className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
                 tab === t
                   ? "bg-card text-foreground shadow-sm"
@@ -117,41 +160,72 @@ export default function OrgSetupPage() {
                     placeholder="acme.com"
                   />
                 </Field>
-                <Button className="w-full" loading={loading} onClick={handleCreate}>
+                <Button
+                  className="w-full"
+                  loading={loading}
+                  onClick={handleCreate}
+                >
                   Create organisation
                 </Button>
               </div>
             ) : (
-              <div className="space-y-5">
-                <div className="rounded-lg border border-border bg-muted/40 px-4 py-4">
-                  <div className="mb-1 flex items-center gap-2">
-                    <Users size={14} className="text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">
-                      Already have an invite?
-                    </h3>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Check your email — your org admin may have sent you an invite link. Click it
-                    to join automatically without needing the org ID.
-                  </p>
-                </div>
-
+              <div className="space-y-6">
                 <Field
-                  label="Organisation ID"
-                  htmlFor="org_id"
-                  hint="Ask your organisation's owner for their org ID."
+                  label="Organisation code"
+                  htmlFor="join_code"
+                  hint="Ask your organisation's owner for their 8-character join code."
                 >
                   <Input
-                    id="org_id"
-                    value={orgId}
-                    onChange={(e) => setOrgId(e.target.value)}
-                    placeholder="Paste the org UUID here"
-                    className="font-mono"
+                    id="join_code"
+                    value={joinCode}
+                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                    placeholder="e.g. 7K4RXQ2M"
+                    className="font-mono uppercase"
+                    maxLength={12}
                   />
                 </Field>
-                <Button className="w-full" loading={loading} onClick={handleRequestJoin}>
-                  Send join request
+                <Button
+                  className="w-full"
+                  loading={loading}
+                  onClick={handleJoinByCode}
+                >
+                  Join with code
                 </Button>
+
+                <div className="relative py-1">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-border" />
+                  </div>
+                  <div className="relative flex justify-center text-xs">
+                    <span className="bg-background px-2 text-muted-foreground">
+                      Or use an org ID
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <Field
+                    label="Organisation ID"
+                    htmlFor="org_id"
+                    hint="Fallback if you don't have a join code — ask the owner for their org ID."
+                  >
+                    <Input
+                      id="org_id"
+                      value={orgId}
+                      onChange={(e) => setOrgId(e.target.value)}
+                      placeholder="Paste the org UUID here"
+                      className="font-mono"
+                    />
+                  </Field>
+                  <Button
+                    className="w-full"
+                    variant="outline"
+                    loading={loading}
+                    onClick={handleRequestJoin}
+                  >
+                    Send join request by ID
+                  </Button>
+                </div>
               </div>
             )}
           </CardContent>

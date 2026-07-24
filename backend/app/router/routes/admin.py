@@ -12,7 +12,7 @@ POST /admin/users/{user_id}/block     → is_active = False
 POST /admin/users/{user_id}/unblock   → is_active = True
 """
 
-from typing import Annotated, Optional
+from typing import Annotated, List, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -22,9 +22,11 @@ from app.core.dependencies import AdminUser, get_db
 from app.db.models.organization import Organization, VerificationStatus
 from app.db.models.user import User, UserRole
 from app.repositories import admin_repo
+from app.repositories.org_repo import list_members as list_org_members_repo
 from app.repositories.org_repo import get_org_by_id
 from app.repositories.user_repo import get_user_by_id
 from app.schemas.admin import (
+    AdminOrgMemberResponse,
     AdminOrgResponse,
     AdminUserResponse,
     ModerationActionRequest,
@@ -101,6 +103,28 @@ async def list_orgs(
     )
 
 
+@router.get("/orgs/{org_id}/members", response_model=List[AdminOrgMemberResponse])
+async def list_org_members(
+    org_id: UUID,
+    admin: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    org = await _get_org_or_404(db, org_id)
+    members = await list_org_members_repo(db, org.id)
+    result = []
+    for m in members:
+        u = await db.get(User, m.user_id)
+        result.append(AdminOrgMemberResponse(
+            id=m.id,
+            user_id=m.user_id,
+            role=m.role.value if hasattr(m.role, "value") else m.role,
+            email=u.email if u else None,
+            full_name=u.full_name if u else None,
+            is_active=u.is_active if u else False,
+        ))
+    return result
+
+
 @router.post("/orgs/{org_id}/verify", response_model=AdminOrgResponse)
 async def verify_org(
     org_id: UUID,
@@ -174,7 +198,15 @@ async def list_users(
 ):
     users, total = await admin_repo.list_users(db, role, is_active, q, skip, limit)
     return PaginatedUsersResponse(
-        items=[AdminUserResponse.model_validate(u) for u in users],
+        items=[
+            AdminUserResponse(
+                id=u.id, email=u.email, full_name=u.full_name, role=u.role,
+                is_active=u.is_active, is_verified=u.is_verified,
+                has_password=u.hashed_password is not None,
+                created_at=u.created_at,  # type: ignore
+            )
+            for u in users
+        ],
         total=total,
         skip=skip,
         limit=limit,

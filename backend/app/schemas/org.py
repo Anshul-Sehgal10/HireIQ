@@ -18,6 +18,7 @@ class OrgResponse(BaseModel):
     verification_status: VerificationStatus
     subscription_tier: SubscriptionTier
     owner_id: uuid.UUID
+    join_code: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -40,6 +41,10 @@ class InviteCreate(BaseModel):
 
 class JoinRequestCreate(BaseModel):
     org_id: uuid.UUID
+
+
+class JoinByCodeRequest(BaseModel):    
+    code: str = Field(min_length=4, max_length=12)
 
 
 class InviteResponse(BaseModel):

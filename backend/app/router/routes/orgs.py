@@ -37,6 +37,7 @@ from app.repositories import org_repo
 from app.schemas.org import (
     InviteCreate,
     InviteResponse,
+    JoinByCodeRequest,
     JoinRequestCreate,
     OrgCreate,
     OrgMemberResponse,
@@ -87,7 +88,11 @@ async def get_my_org(
     org = await org_repo.get_org_for_user(db, user.id)
     if not org:
         raise HTTPException(404, "You are not a member of any organisation")
-    return org
+
+    response = OrgResponse.model_validate(org)
+    if org.owner_id != user.id:
+        response.join_code = None
+    return response
 
 
 @router.get("/mine/members", response_model=List[OrgMemberResponse])
@@ -343,3 +348,45 @@ async def reject_request(
         raise HTTPException(404, "Request not found")
 
     return await org_repo.reject_request(db, req)
+
+
+@router.post("/mine/regenerate-code", response_model=OrgResponse)
+async def regenerate_join_code(
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    org = await org_repo.get_org_for_user(db, user.id)
+    if not org:
+        raise HTTPException(404, "You are not a member of any organisation")
+
+    membership = await org_repo.get_membership(db, user.id, org.id)
+    _assert_owner(membership)
+
+    org = await org_repo.regenerate_join_code(db, org)
+    return org  # requester is confirmed owner — no masking needed
+
+
+@router.post("/join-by-code", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)
+async def join_by_code(
+    body: JoinByCodeRequest,
+    user: EmployerUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Same outcome as POST /orgs/{org_id}/requests/ — creates a pending
+    join request the owner must approve — just resolved via the short
+    code instead of a raw org UUID.
+    """
+    existing = await org_repo.get_org_for_user(db, user.id)
+    if existing:
+        raise HTTPException(400, "You are already a member of an organisation")
+
+    org = await org_repo.get_org_by_join_code(db, body.code)
+    if not org:
+        raise HTTPException(404, "Invalid join code")
+
+    if org.verification_status == VerificationStatus.BLOCKED:
+        raise HTTPException(403, "This organisation is currently blocked")
+
+    req = await org_repo.create_join_request(db, org.id, user.id, user.email)
+    return req

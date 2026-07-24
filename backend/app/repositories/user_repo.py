@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.user import User, UserRole, OAuthProvider
 from app.db.models.candidate_profiles import CandidateProfile
+from app.repositories import oauth_repo
 
 
 # ---------------------------------------------------------------------------
@@ -34,17 +35,13 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
 
 
 async def get_user_by_oauth(
-    db: AsyncSession,
-    provider: OAuthProvider,
-    provider_id: str,
+    db: AsyncSession, provider: OAuthProvider, provider_account_id: str
 ) -> Optional[User]:
-    result = await db.execute(
-        select(User).where(
-            User.oauth_provider == provider,
-            User.oauth_provider_id == provider_id,
-        )
-    )
-    return result.scalar_one_or_none()
+    """Resolves through oauth_accounts now, not a column on users."""
+    account = await oauth_repo.get_by_provider_account(db, provider, provider_account_id)
+    if not account:
+        return None
+    return await get_user_by_id(db, account.user_id)
 
 
 # ---------------------------------------------------------------------------
@@ -73,40 +70,55 @@ async def create_user(db: AsyncSession, data: dict) -> User:
     return user
 
 
-async def upsert_oauth_user(db: AsyncSession, data: dict) -> User:
+async def create_oauth_user(db: AsyncSession, email: str, full_name: str) -> User:
     """
-    Called after a successful OAuth callback.
+    Brand-new OAuth signup — role is left None. The caller (oauth.py) will
+    redirect the browser to the role-selection page; POST /auth/select-role
+    is what finally sets it (and creates the CandidateProfile row, mirroring
+    what create_user does for local signups, once the role is known).
+    """
+    user = User(
+        email=email.lower().strip(),
+        full_name=full_name,
+        role=None,
+        is_verified=True,   # the OAuth provider already verified the email
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
-    Priority order:
-    1. Find by provider + provider_id  →  return as-is (returning user)
-    2. Find by email                   →  link the OAuth account to existing user
-    3. Neither found                   →  create a brand new CANDIDATE account
+
+async def upsert_oauth_user(
+    db: AsyncSession,
+    provider: OAuthProvider,
+    provider_account_id: str,
+    email: str,
+    full_name: str,
+) -> User:
     """
-    # 1. Exact OAuth match
-    user = await get_user_by_oauth(db, data["oauth_provider"], data["oauth_provider_id"])
-    if user:
+    3-step OAuth login algorithm:
+    1. Exact (provider, provider_account_id) match → return the linked user.
+    2. Else, match by email → link this provider to that existing user.
+    3. Else → create a new user (role=None) and link the provider.
+    """
+    email = email.lower().strip()
+
+    existing_account = await oauth_repo.get_by_provider_account(db, provider, provider_account_id)
+    if existing_account:
+        user = await get_user_by_id(db, existing_account.user_id)
+        if not user:
+            raise ValueError("Linked user record is missing — data integrity issue")
         return user
 
-    # 2. Email already exists (registered with password before)
-    user = await get_user_by_email(db, data["email"])
+    user = await get_user_by_email(db, email)
     if user:
-        user.oauth_provider = data["oauth_provider"]
-        user.oauth_provider_id = data["oauth_provider_id"]
-        if not user.full_name and data.get("full_name"):
-            user.full_name = data["full_name"]
-        await db.commit()
-        await db.refresh(user)
+        await oauth_repo.create(db, user.id, provider, provider_account_id, email)
         return user
 
-    # 3. New user — default role is CANDIDATE; they can change later
-    return await create_user(db, {
-        "email": data["email"],
-        "full_name": data.get("full_name", ""),
-        "oauth_provider": data["oauth_provider"],
-        "oauth_provider_id": data["oauth_provider_id"],
-        "role": UserRole.CANDIDATE,
-        "is_verified": True,   # OAuth providers already verified the email
-    })
+    user = await create_oauth_user(db, email, full_name)
+    await oauth_repo.create(db, user.id, provider, provider_account_id, email)
+    return user
 
 
 async def update_user(

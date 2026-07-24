@@ -1,6 +1,9 @@
+import uuid
+from datetime import datetime
+from typing import List, Optional
 from pydantic import BaseModel, EmailStr
 from app.db.models import UserRole
-from typing import Optional
+from app.db.models.user import OAuthProvider
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -25,3 +28,14 @@ class UpdateProfileRequest(BaseModel):
     # Password change
     current_password: Optional[str] = None   # required if user already has a password
     new_password: Optional[str] = None
+
+class SelectRoleRequest(BaseModel):          # NEW
+    role: UserRole
+
+class OAuthAccountResponse(BaseModel):        # NEW
+    id: uuid.UUID
+    provider: OAuthProvider
+    provider_email: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
