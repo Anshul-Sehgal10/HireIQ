@@ -14,6 +14,14 @@ export function apiUrl(path: string): string {
   return `${getApiBaseUrl()}${normalizedPath}`;
 }
 
+function forceLoginRedirect() {
+  if (typeof window === "undefined") return;
+  // Avoid a redirect loop if we're already on a public auth page.
+  if (window.location.pathname.startsWith("/auth/")) return;
+  document.cookie = "access_token=; path=/; max-age=0; SameSite=Lax";
+  window.location.href = "/auth/login";
+}
+
 export async function apiFetch(path: string, options?: RequestInit): Promise<Response> {
   const doFetch = () =>
     fetch(apiUrl(path), {
@@ -31,7 +39,13 @@ export async function apiFetch(path: string, options?: RequestInit): Promise<Res
     credentials: "include",
     cache: "no-store",
   });
-  if (!refreshRes.ok) return res;
+
+  if (!refreshRes.ok) {
+    // Session is genuinely dead — don't let callers render a 401 body as
+    // if it were valid data. Force a full redirect instead.
+    forceLoginRedirect();
+    return res;
+  }
 
   return doFetch();
 }

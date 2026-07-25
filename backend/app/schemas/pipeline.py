@@ -49,10 +49,11 @@ class ChannelMemberResponse(BaseModel):
 
 class RankedCandidateResponse(BaseModel):
     """
-    Deliberately surfaces resume match score and scenario score as separate
-    fields rather than a blended composite — composite scoring is a
-    backlog item (deferred), so this stays a display concern for the
-    employer, not a computed ranking formula.
+    Surfaces resume match score and scenario score as separate fields
+    AND a computed composite_score for sorting — composite scoring was
+    deferred until an explicit ranking need was requested; it's no longer
+    deferred, but the raw scores stay visible too rather than being
+    replaced.
     """
     application_id: uuid.UUID
     candidate_id: uuid.UUID
@@ -62,6 +63,7 @@ class RankedCandidateResponse(BaseModel):
     match_score: Optional[float]
     scenario_score: Optional[float]
     scenario_ai_summary: Optional[str]
+    composite_score: Optional[float]   # NEW
     is_override: bool
     applied_at: datetime
     in_pipeline: bool

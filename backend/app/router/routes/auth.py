@@ -5,27 +5,39 @@ Provides endpoints for user registration, login, token refresh,
 profile management, and logout. Cookie handling and JWT generation
 are centralized through helper functions to keep endpoint logic clean.
 """
-
+# Types
 import uuid
 from typing import Annotated, List
+
+# FastAPI and SQLAlchemy
 from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from jose import JWTError
 
+# Core and security
 from app.core.dependencies import CurrentUser, get_db
 from app.core.config import settings
 from app.core.security import (
     create_access_token, create_refresh_token,
     decode_token, hash_password, verify_password,
 )
+
+# Database models
 from app.db.models import User, UserRole
+from app.db.models.user import OAuthProvider
+
+# Repositories and CRUD functions
 from app.repositories import oauth_repo
-from app.repositories.user_repo import get_user_by_email, create_user, get_user_by_id, update_user
+from app.repositories.user_repo import (
+    get_user_by_email, create_user, get_user_by_id, update_user, find_existing_oauth_user,
+)
+
+# Pydantic schemas
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, UpdateProfileRequest,
     SelectRoleRequest, OAuthAccountResponse,
 )
-from jose import JWTError
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -67,9 +79,11 @@ def clear_access_cookie(response: Response):
     """Remove the access token cookie from the client."""
     response.delete_cookie(key="access_token", path="/")
 
+#_role_value helper and its 3 remaining call sites (register, login, refresh, update_me) can be simplified back to user.role.value directly since role is guaranteed non-null now — but leaving _role_value in place is harmless (it just always takes the truthy branch), so no forced cleanup needed there.
 def _role_value(user: User) -> str | None:
     """user.role is None only for an OAuth signup mid role-selection."""
     return user.role.value if user.role else None
+
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
 async def register(
@@ -95,9 +109,9 @@ async def register(
     # Issue tokens immediately — same logic as /login
     user_data = {"email": user.email, "full_name": user.full_name}
     access_token = create_access_token(
-    user_id=str(user.id),
-    role=_role_value(user),
-    user_data=user_data
+        user_id=str(user.id),
+        role=_role_value(user),
+        user_data=user_data
     )
     refresh_token = create_refresh_token(str(user.id))
 
@@ -118,6 +132,10 @@ async def login(
     if not user or not verify_password(body.password, user.hashed_password): # type: ignore 
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     
+    # deleted or blocked users cannot log in
+    if not user.is_active:                                          
+        raise HTTPException(status_code=403, detail="This account has been blocked.")
+    
     # 2. Shape the user_data dict exactly like the token function expects
     user_data = {
         "email": user.email,
@@ -126,9 +144,9 @@ async def login(
 
     # 3. Generate token pairs safely
     access_token = create_access_token(
-    user_id=str(user.id),
-    role=_role_value(user),
-    user_data=user_data
+        user_id=str(user.id),
+        role=_role_value(user),
+        user_data=user_data
     )
     
     refresh_token = create_refresh_token(
@@ -319,39 +337,66 @@ async def logout(
 async def select_role(
     body: SelectRoleRequest,
     response: Response,
-    user: CurrentUser,
     db: Annotated[AsyncSession, Depends(get_db)],
+    oauth_pending_token: str | None = Cookie(default=None),
 ):
-    if user.role is not None:
-        raise HTTPException(400, "Role has already been set for this account")
+    """
+    Completes a brand-new OAuth signup. No User row exists yet at this
+    point — the OAuth profile lives entirely in the short-lived
+    oauth_pending_token cookie set by GET /auth/{provider}/callback. Real
+    session cookies are only issued once a role is confirmed here.
+    """
+    if not oauth_pending_token:
+        raise HTTPException(400, "No pending sign-up found — please sign in again.")
     if body.role == UserRole.ADMIN:
         raise HTTPException(400, "Cannot self-assign the admin role")
 
-    user.role = body.role
-    await db.commit()
-    await db.refresh(user)
+    try:
+        payload = decode_token(oauth_pending_token)
+    except JWTError:
+        raise HTTPException(400, "Your sign-up session has expired — please sign in again.")
+    if payload.get("type") != "oauth_pending":
+        raise HTTPException(400, "Invalid sign-up session")
 
-    if body.role == UserRole.CANDIDATE:
-        from app.db.models.candidate_profiles import CandidateProfile
-        existing = await db.execute(
-            select(CandidateProfile).where(CandidateProfile.user_id == user.id)
+    provider = OAuthProvider(payload["provider"])
+    provider_account_id = payload["provider_account_id"]
+    email = payload["email"]
+    full_name = payload["full_name"]
+
+    # Race-safety: if the same signup somehow completed already (e.g. two
+    # tabs), log into the resulting account instead of erroring or
+    # creating a duplicate.
+    user = await find_existing_oauth_user(db, provider, provider_account_id, email)
+
+    if user is None:
+        user = User(
+            email=email.lower().strip(),
+            full_name=full_name,
+            role=body.role,
+            is_verified=True,   # the OAuth provider already verified the email
         )
-        if not existing.scalar_one_or_none():
+        db.add(user)
+        await db.flush()
+        await oauth_repo.create(db, user.id, provider, provider_account_id, email)
+
+        if body.role == UserRole.CANDIDATE:
+            from app.db.models.candidate_profiles import CandidateProfile
             db.add(CandidateProfile(user_id=user.id))
-            await db.commit()
+
+        await db.commit()
+        await db.refresh(user)
+
+    if not user.is_active:
+        raise HTTPException(403, "This account has been blocked.")
 
     user_data = {"email": user.email, "full_name": user.full_name}
-    access_token = create_access_token(
-        user_id=str(user.id),
-        role=_role_value(user),
-        user_data=user_data
-    )
+    access_token = create_access_token(str(user.id), user.role.value, user_data)
     refresh_token = create_refresh_token(str(user.id))
     set_refresh_cookie(response, refresh_token)
     set_access_cookie(response, access_token)
+    response.delete_cookie("oauth_pending_token", path="/")
 
-    return {"id": str(user.id), "role": user.role, "message": "Role set successfully"}
-
+    return {"id": str(user.id), "role": user.role, "message": "Account created successfully"}
 
 # ---------------------------------------------------------------------------
 # Linked OAuth accounts

@@ -55,3 +55,33 @@ def compute_match_score(
         similarity *= CROSS_DOMAIN_PENALTY
 
     return similarity
+
+# Weighted blend for composite ranking. Fixed platform-wide for now (not
+# stored/configurable per job) — kept in one place so it's a one-line
+# change if this needs to become per-job later, mirroring how
+# match_threshold already is.
+RESUME_SCORE_WEIGHT = 0.6
+SCENARIO_SCORE_WEIGHT = 0.4
+
+
+def compute_composite_score(
+    match_score: float | None,
+    scenario_score: float | None,
+    scenario_enabled: bool,
+) -> float | None:
+    """
+    Computed on read, never stored — so the weighting can change without a
+    backfill migration.
+
+    - Scenario disabled, or enabled but not yet scored → falls back to
+      match_score alone (nothing to blend with).
+    - match_score missing (embeddings not ready yet) but scenario_score
+      present → falls back to scenario_score alone, rather than treating
+      the missing signal as a zero and dragging the composite down
+      unfairly.
+    """
+    if not scenario_enabled or scenario_score is None:
+        return match_score
+    if match_score is None:
+        return scenario_score
+    return RESUME_SCORE_WEIGHT * match_score + SCENARIO_SCORE_WEIGHT * scenario_score

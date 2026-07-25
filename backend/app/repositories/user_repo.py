@@ -70,55 +70,34 @@ async def create_user(db: AsyncSession, data: dict) -> User:
     return user
 
 
-async def create_oauth_user(db: AsyncSession, email: str, full_name: str) -> User:
-    """
-    Brand-new OAuth signup — role is left None. The caller (oauth.py) will
-    redirect the browser to the role-selection page; POST /auth/select-role
-    is what finally sets it (and creates the CandidateProfile row, mirroring
-    what create_user does for local signups, once the role is known).
-    """
-    user = User(
-        email=email.lower().strip(),
-        full_name=full_name,
-        role=None,
-        is_verified=True,   # the OAuth provider already verified the email
-    )
-    db.add(user)
-    await db.commit()
-    await db.refresh(user)
-    return user
-
-
-async def upsert_oauth_user(
+async def find_existing_oauth_user(
     db: AsyncSession,
     provider: OAuthProvider,
     provider_account_id: str,
     email: str,
-    full_name: str,
-) -> User:
+) -> Optional[User]:
     """
-    3-step OAuth login algorithm:
-    1. Exact (provider, provider_account_id) match → return the linked user.
-    2. Else, match by email → link this provider to that existing user.
-    3. Else → create a new user (role=None) and link the provider.
+    Steps 1-2 of the OAuth algorithm only:
+      1. Exact (provider, provider_account_id) match → return that user.
+      2. Else, email match on an existing user → link this provider to
+         them, return that user.
+    Step 3 (genuinely new person) is intentionally NOT handled here —
+    returns None instead, signaling the caller to route through the
+    pending-token + role-selection flow rather than creating a role-less
+    row. See create_oauth_pending_token / POST /auth/select-role.
     """
     email = email.lower().strip()
 
     existing_account = await oauth_repo.get_by_provider_account(db, provider, provider_account_id)
     if existing_account:
-        user = await get_user_by_id(db, existing_account.user_id)
-        if not user:
-            raise ValueError("Linked user record is missing — data integrity issue")
-        return user
+        return await get_user_by_id(db, existing_account.user_id)
 
     user = await get_user_by_email(db, email)
     if user:
         await oauth_repo.create(db, user.id, provider, provider_account_id, email)
         return user
 
-    user = await create_oauth_user(db, email, full_name)
-    await oauth_repo.create(db, user.id, provider, provider_account_id, email)
-    return user
+    return None
 
 
 async def update_user(

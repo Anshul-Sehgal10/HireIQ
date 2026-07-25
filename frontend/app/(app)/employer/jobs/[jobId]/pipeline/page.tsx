@@ -18,6 +18,7 @@ import {
   SkeletonText,
   useToast,
 } from "@/components/ui";
+import ExtractionDetailModal from "@/components/ExtractionDetailModal";
 
 interface RankedCandidate {
   application_id: string;
@@ -28,6 +29,7 @@ interface RankedCandidate {
   match_score: number | null;
   scenario_score: number | null;
   scenario_ai_summary: string | null;
+  composite_score: number | null;
   is_override: boolean;
   applied_at: string;
   in_pipeline: boolean;
@@ -80,6 +82,14 @@ function Content() {
   const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
 
+  const [resumeModal, setResumeModal] = useState<{
+    title: string;
+    categories: string[] | null;
+    parsedData: any;
+    hasEmbedding: boolean;
+  } | null>(null);
+  const [resumeLoadingId, setResumeLoadingId] = useState<string | null>(null);
+
   const loadAll = async () => {
     setLoading(true);
     try {
@@ -94,7 +104,11 @@ function Content() {
       if (membersRes.ok) setMembers(await membersRes.json());
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      toast({ title: "Failed to load pipeline", description: e.message, variant: "error" });
+      toast({
+        title: "Failed to load pipeline",
+        description: e.message,
+        variant: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -108,7 +122,10 @@ function Content() {
   const shortlist = async (applicationId: string) => {
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(`/jobs/${jobId}/pipeline/shortlist/${applicationId}`, { method: "POST" });
+      const res = await apiFetch(
+        `/jobs/${jobId}/pipeline/shortlist/${applicationId}`,
+        { method: "POST" },
+      );
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to shortlist");
@@ -116,7 +133,11 @@ function Content() {
       toast({ title: "Candidate shortlisted", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      toast({ title: "Failed to shortlist", description: e.message, variant: "error" });
+      toast({
+        title: "Failed to shortlist",
+        description: e.message,
+        variant: "error",
+      });
     } finally {
       setBusyId(null);
     }
@@ -126,7 +147,10 @@ function Content() {
     if (!confirm("Reject this candidate?")) return;
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(`/jobs/${jobId}/pipeline/reject/${applicationId}`, { method: "POST" });
+      const res = await apiFetch(
+        `/jobs/${jobId}/pipeline/reject/${applicationId}`,
+        { method: "POST" },
+      );
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to reject");
@@ -134,7 +158,11 @@ function Content() {
       toast({ title: "Candidate rejected", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      toast({ title: "Failed to reject", description: e.message, variant: "error" });
+      toast({
+        title: "Failed to reject",
+        description: e.message,
+        variant: "error",
+      });
     } finally {
       setBusyId(null);
     }
@@ -151,10 +179,17 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to advance stage");
       }
-      toast({ title: `Pipeline advanced to ${stage.replace(/_/g, " ")}`, variant: "success" });
+      toast({
+        title: `Pipeline advanced to ${stage.replace(/_/g, " ")}`,
+        variant: "success",
+      });
       await loadAll();
     } catch (e: any) {
-      toast({ title: "Failed to advance stage", description: e.message, variant: "error" });
+      toast({
+        title: "Failed to advance stage",
+        description: e.message,
+        variant: "error",
+      });
     } finally {
       setAdvancing(false);
     }
@@ -163,12 +198,18 @@ function Content() {
   const sendMessage = async () => {
     if (!content.trim()) return;
     if (msgType === "direct" && !recipientId) {
-      toast({ title: "Select a recipient for a direct message", variant: "error" });
+      toast({
+        title: "Select a recipient for a direct message",
+        variant: "error",
+      });
       return;
     }
     setSending(true);
     try {
-      const body: Record<string, unknown> = { message_type: msgType, content: content.trim() };
+      const body: Record<string, unknown> = {
+        message_type: msgType,
+        content: content.trim(),
+      };
       if (msgType === "direct") body.recipient_application_id = recipientId;
       const res = await apiFetch(`/jobs/${jobId}/pipeline/messages`, {
         method: "POST",
@@ -182,9 +223,38 @@ function Content() {
       const messagesRes = await apiFetch(`/jobs/${jobId}/pipeline/messages`);
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      toast({ title: "Failed to send message", description: e.message, variant: "error" });
+      toast({
+        title: "Failed to send message",
+        description: e.message,
+        variant: "error",
+      });
     } finally {
       setSending(false);
+    }
+  };
+
+  const viewResume = async (c: RankedCandidate) => {
+    setResumeLoadingId(c.application_id);
+    try {
+      const res = await apiFetch(
+        `/applications/${c.application_id}/candidate-resume`,
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to load resume");
+      setResumeModal({
+        title: `${c.candidate_name}'s resume`,
+        categories: data.categories,
+        parsedData: data.parsed_data,
+        hasEmbedding: data.has_embedding,
+      });
+    } catch (e: any) {
+      toast({
+        title: "Failed to load resume",
+        description: e.message,
+        variant: "error",
+      });
+    } finally {
+      setResumeLoadingId(null);
     }
   };
 
@@ -217,7 +287,9 @@ function Content() {
             {loading ? (
               <SkeletonText lines={4} />
             ) : candidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No applications yet.</p>
+              <p className="text-sm text-muted-foreground">
+                No applications yet.
+              </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -227,16 +299,24 @@ function Content() {
                       <th className="py-2 pr-4 font-medium">Status</th>
                       <th className="py-2 pr-4 font-medium">Match</th>
                       <th className="py-2 pr-4 font-medium">Scenario</th>
+                      <th className="py-2 pr-4 font-medium">Composite</th>
                       <th className="py-2 pr-4 font-medium">Pipeline</th>
                       <th className="py-2 pr-4 font-medium">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {candidates.map((c) => (
-                      <tr key={c.application_id} className="border-b border-border last:border-0">
+                      <tr
+                        key={c.application_id}
+                        className="border-b border-border last:border-0"
+                      >
                         <td className="py-3 pr-4">
-                          <p className="font-medium text-foreground">{c.candidate_name}</p>
-                          <p className="text-xs text-muted-foreground">{c.candidate_email}</p>
+                          <p className="font-medium text-foreground">
+                            {c.candidate_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {c.candidate_email}
+                          </p>
                         </td>
                         <td className="py-3 pr-4">
                           <StatusBadge status={c.status} />
@@ -245,14 +325,33 @@ function Content() {
                           {c.match_score != null ? (
                             <MatchScoreRing score={c.match_score} size="sm" />
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="py-3 pr-4">
                           {c.scenario_score != null ? (
-                            <MatchScoreRing score={c.scenario_score} size="sm" />
+                            <MatchScoreRing
+                              score={c.scenario_score}
+                              size="sm"
+                            />
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 pr-4">
+                          {c.composite_score != null ? (
+                            <MatchScoreRing
+                              score={c.composite_score}
+                              size="sm"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="py-3 pr-4 text-xs text-muted-foreground">
@@ -260,6 +359,14 @@ function Content() {
                         </td>
                         <td className="py-3 pr-4">
                           <div className="flex flex-wrap gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              loading={resumeLoadingId === c.application_id}
+                              onClick={() => viewResume(c)}
+                            >
+                              Resume
+                            </Button>
                             <Button
                               size="sm"
                               loading={busyId === c.application_id}
@@ -298,9 +405,15 @@ function Content() {
               </h2>
             </div>
             <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-              <Select value={stage} onChange={(e) => setStage(e.target.value)} className="sm:w-56">
+              <Select
+                value={stage}
+                onChange={(e) => setStage(e.target.value)}
+                className="sm:w-56"
+              >
                 {STAGES.map((s) => (
-                  <option key={s} value={s}>{s.replace(/_/g, " ")}</option>
+                  <option key={s} value={s}>
+                    {s.replace(/_/g, " ")}
+                  </option>
                 ))}
               </Select>
               <Button loading={advancing} onClick={advanceStage}>
@@ -308,8 +421,8 @@ function Content() {
               </Button>
             </div>
             <p className="mt-2.5 text-xs text-muted-foreground">
-              Moves every active pipeline member's application status and posts a system message.
-              Rejected/withdrawn candidates are skipped.
+              Moves every active pipeline member's application status and posts
+              a system message. Rejected/withdrawn candidates are skipped.
             </p>
           </CardContent>
         </Card>
@@ -321,7 +434,9 @@ function Content() {
               Active members ({members.length})
             </h2>
             {members.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No one has been shortlisted yet.</p>
+              <p className="text-sm text-muted-foreground">
+                No one has been shortlisted yet.
+              </p>
             ) : (
               <ul className="space-y-2">
                 {members.map((m) => (
@@ -330,7 +445,9 @@ function Content() {
                       {m.candidate_name?.[0]?.toUpperCase() ?? "?"}
                     </span>
                     <span className="text-foreground">{m.candidate_name}</span>
-                    <span className="text-muted-foreground">({m.candidate_email})</span>
+                    <span className="text-muted-foreground">
+                      ({m.candidate_email})
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -350,7 +467,9 @@ function Content() {
 
             <div className="mb-4 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3 scrollbar-none">
               {messages.length === 0 && (
-                <p className="text-sm text-muted-foreground">No messages yet.</p>
+                <p className="text-sm text-muted-foreground">
+                  No messages yet.
+                </p>
               )}
               {messages.map((m) => (
                 <div
@@ -378,7 +497,9 @@ function Content() {
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Select
                   value={msgType}
-                  onChange={(e) => setMsgType(e.target.value as "broadcast" | "direct")}
+                  onChange={(e) =>
+                    setMsgType(e.target.value as "broadcast" | "direct")
+                  }
                   className="sm:w-56"
                 >
                   <option value="broadcast">Broadcast (all members)</option>
@@ -405,12 +526,26 @@ function Content() {
                 placeholder="Message content…"
                 rows={2}
               />
-              <Button leftIcon={<Send size={13} />} loading={sending} onClick={sendMessage}>
+              <Button
+                leftIcon={<Send size={13} />}
+                loading={sending}
+                onClick={sendMessage}
+              >
                 Send
               </Button>
             </div>
           </CardContent>
         </Card>
+
+        {resumeModal && (
+          <ExtractionDetailModal
+            title={resumeModal.title}
+            categories={resumeModal.categories}
+            parsedData={resumeModal.parsedData}
+            hasEmbedding={resumeModal.hasEmbedding}
+            onClose={() => setResumeModal(null)}
+          />
+        )}
       </div>
     </div>
   );

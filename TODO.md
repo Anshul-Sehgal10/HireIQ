@@ -13,16 +13,15 @@ each agent gives the user the content to paste in.
 
 The Todos for the user, ai model ignore this section
 
-- [Done] make the pipeline_services file in the backend
-- [ ] test the pipeline flow
+- [ ] test the pipeline flow - can't shortlist candidates
 - [ ] The candidate cannot withdraw his application
-- [ ] Scenario test should start right after you click "Start scenario" right now it jsut takes you to job feed then you click the application again and proceed to the test
-- [ ] If the token is invalid or expired, redirect to login page instead of showing empty dashboard
-- [ ] on org request page, if the user already have an org, redirect to his org page
-- [ ] blocked members can't login, when unblocking an org, should it unblock the org members asw? or manual
-- [ ] Remove the exceptions page (onboarding/select-role) to "(public)", no need to add it in "(app)" and create an exception for it in "proxy.ts"
-- [ ] Why is the role nullable? if an oauth user registers 1st time, just show him the select-role page (which is public) and ask for his role, when he gives the role then only issue the jwts, no need to make it null, if by chance the role is null, just show the select-role page to get a role (employer/candidate)
-- [ ] Implement #3 from "Platform development status overview"
+- [ ] Scenario test should start right after you click "Start scenario" right now it just takes you to job feed then you click the application again and proceed to the test
+- [ ] Claude's design - Design decision — org unblock and members: keeping it manual, as originally implemented. Unblocking an org restores VERIFIED only; members who were auto-blocked stay blocked until an admin explicitly unblocks them (via the Members modal or Users tab). Reasoning: auto-unblocking members would silently restore access for someone who may have been individually flagged for a separate reason, or who joined after the org-level block for an unrelated cause — the admin should make that call per-person, same as the existing "jobs stay closed after org unblock, deliberate republish required" pattern elsewhere in the app. No code change needed here; this was already the behavior, just documenting the reasoning since it was an open question.
+
+      What i think - When we block users independently, remove them from the org/any applied job as well, so they are totally isolated and prevents breaking the system, But when we block an org, the members stay in the org but gets blocked, and when we unblock the org, the members gets unblocked as well.
+- [ ] Turn org chat into live socket chat, as we will need it later for jobchat as well, or should we use http polling?
+- [ ] Employers can't join orgs by invite link, discard the link and org id system entirely, unnecessary complexity, they need code to join the org
+- [ ] Per job candidate count visible on job posting page to employers
 
 ## Bugs
 
@@ -34,15 +33,12 @@ Backend agent fix these bugs, Frontend agents report backend bugs here:
 
 Frontend agent fix these bugs, Backend agents report frontend bugs here:
 
-- [ ] Logout redirects on home page not login
-
 ## Features
 
 ### Backend
 
 Backend agent implement these features, Frontend agents report backend features here:
 
-- [Later] Local user → can link a Google/LinkedIn account
 - [ ] Make it so the candidate can't apply for job until scenario (if enabled) is completed.
 - [ ] Admin platform-analytics endpoint — needed to build out the real Admin
       Control Center per the PRD (org verification queue, token usage by org,
@@ -132,14 +128,3 @@ lane per project split):**
 - Job posting flow: `publish`/`reopen` can now fail with 403 + a specific
   message if the org isn't verified — surface that error instead of a
   generic failure toast.
-
-Also flagging (found while reviewing, not fixed — this is frontend-owned):
-in `candidate/jobs/page.tsx`, `handleWithdraw` is defined but never wired
-to any button — there's no way for a candidate to withdraw an application
-from the job feed page. The backend route (`POST
-/applications/{id}/withdraw`) works correctly and is already used
-elsewhere (candidate dashboard, for the below-threshold-scenario case
-only). This is very likely the actual cause of the "candidate cannot
-withdraw his application" bug on your list — recommend adding a general
-withdraw action to `JobDetailModal` or the dashboard for any active
-(non-terminal) application, not just the scenario-failure case.

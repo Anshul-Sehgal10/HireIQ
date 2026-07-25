@@ -89,11 +89,6 @@ def require_role(*roles: UserRole):
     async def role_checker(
         current_user: Annotated[User, Depends(get_current_user)]
     ) -> User:
-        if current_user.role is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Please complete registration by selecting a role before continuing.",
-            )
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

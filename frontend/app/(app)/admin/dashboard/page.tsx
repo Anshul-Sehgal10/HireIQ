@@ -41,7 +41,7 @@ interface AdminUser {
   id: string;
   email: string;
   full_name: string;
-  role: string | null;
+  role: string;
   is_active: boolean;
   is_verified: boolean;
 }
@@ -433,7 +433,7 @@ function DashboardContent() {
                             </p>
                           </td>
                           <td className="py-3 pr-4 capitalize text-muted-foreground">
-                            {u.role ?? "pending role"}
+                            {u.role}
                           </td>
                           <td className="py-3 pr-4">
                             <Badge

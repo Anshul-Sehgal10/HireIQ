@@ -15,17 +15,26 @@ Candidate-facing:
   GET  /applications/{application_id}/pipeline/messages
 """
 
+# Types 
 import uuid
 from typing import Annotated, List
 
+# FastAPI and SQLAlchemy
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Auth and logging
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
+
+# Database models
 from app.db.models.application import ApplicationStatus
 from app.db.models.pipeline import MessageType
+
+# Repositories and CRUD functions
 from app.repositories import application_repo, job_repo, pipeline_repo
 from app.repositories.org_repo import get_org_for_user
+
+# Pydantic schemas
 from app.schemas.pipeline import (
     ChannelMemberResponse,
     ChannelMessageCreate,
@@ -34,7 +43,10 @@ from app.schemas.pipeline import (
     RankedCandidateResponse,
     StageAdvanceRequest,
 )
+
+# Services for business logic
 from app.services import pipeline_service
+from app.services.matching import compute_composite_score
 
 employer_router = APIRouter(prefix="/jobs", tags=["pipeline"])
 candidate_router = APIRouter(prefix="/applications", tags=["pipeline"])
@@ -179,7 +191,7 @@ async def ranked_candidates(
     user: EmployerUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    await _assert_owns_job(db, user, job_id)
+    job = await _assert_owns_job(db, user, job_id)
     applications = await application_repo.list_ranked_for_job(db, job_id)
 
     channel = await pipeline_repo.get_channel_by_job(db, job_id)
@@ -195,6 +207,8 @@ async def ranked_candidates(
         cp = app.candidate_profile
         u = cp.user if cp else None
         sr = app.scenario_response
+        scenario_score = sr.score if sr else None
+        composite = compute_composite_score(app.match_score, scenario_score, job.scenario_enabled)
         result.append(RankedCandidateResponse(
             application_id=app.id,
             candidate_id=app.candidate_id,
@@ -202,14 +216,18 @@ async def ranked_candidates(
             candidate_email=u.email if u else "",
             status=app.status.value if hasattr(app.status, "value") else app.status,
             match_score=app.match_score,
-            scenario_score=sr.score if sr else None,
+            scenario_score=scenario_score,
             scenario_ai_summary=sr.ai_summary if sr else None,
+            composite_score=composite,
             is_override=app.is_override,
             applied_at=app.applied_at,  # type: ignore
             in_pipeline=app.id in active_application_ids,
         ))
-    return result
 
+    # None sorts last regardless of direction — a candidate with no
+    # computable score shouldn't outrank one who has any signal at all.
+    result.sort(key=lambda r: (r.composite_score is None, -(r.composite_score or 0)))
+    return result
 
 # ---------------------------------------------------------------------------
 # Candidate — read own pipeline messages

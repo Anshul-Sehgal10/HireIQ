@@ -42,14 +42,11 @@ class User(UUIDMixin, TimestampMixin, Base):
     Design notes
     ------------
     - hashed_password is nullable to support OAuth-only sign-ups.
-    - role is nullable: a brand-new OAuth signup has no role until they
-      complete POST /auth/select-role. Local registration always supplies
-      a role up front (see RegisterRequest), so this path never applies
-      to local-only accounts.
+    - role is NOT nullable. A brand-new OAuth signup never gets a User row
+      until POST /auth/select-role completes — the OAuth profile is carried
+      in a short-lived signed cookie until then, not a half-created DB row.
     - is_active=False soft-deletes a user without breaking FK references.
-    - OAuth linkage lives entirely in oauth_accounts now — see
-      OAuthAccount. A user may have zero (local-only), one, or several
-      linked provider accounts.
+    - OAuth linkage lives entirely in oauth_accounts — see OAuthAccount.
     """
 
     __tablename__ = "users"
@@ -58,13 +55,13 @@ class User(UUIDMixin, TimestampMixin, Base):
     hashed_password: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
 
-    role: Mapped[Optional[UserRole]] = mapped_column(
+    role: Mapped[UserRole] = mapped_column(
         Enum(
             UserRole,
             name="user_role_enum",
             values_callable=lambda enum_cls: [item.value for item in enum_cls],
         ),
-        nullable=True,
+        nullable=False,
     )
 
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")

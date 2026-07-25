@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -9,6 +9,7 @@ import { Card, CardContent, Button, Field, Input } from "@/components/ui";
 export default function OrgSetupPage() {
   const router = useRouter();
   const [tab, setTab] = useState<"create" | "join">("create");
+  const [checkingExisting, setCheckingExisting] = useState(true);
 
   // Create org state
   const [orgName, setOrgName] = useState("");
@@ -20,6 +21,18 @@ export default function OrgSetupPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {                                                  
+    (async () => {
+      const res = await apiFetch("/orgs/mine");
+      if (res.ok) {
+        router.replace("/employer/organization");
+        return;
+      }
+      setCheckingExisting(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleCreate = async () => {
     if (!orgName.trim()) {
@@ -91,6 +104,14 @@ export default function OrgSetupPage() {
       setLoading(false);
     }
   };
+
+    if (checkingExisting) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="animate-pulse text-sm text-muted-foreground">Checking your account…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">

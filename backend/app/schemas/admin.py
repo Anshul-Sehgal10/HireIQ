@@ -38,7 +38,7 @@ class AdminUserResponse(BaseModel):
     id: uuid.UUID
     email: str
     full_name: str
-    role: Optional[UserRole] = None   # nullable — pending role selection
+    role: UserRole
     is_active: bool
     is_verified: bool
     has_password: bool                 # replaces oauth_provider

@@ -36,7 +36,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
 
 The middleware handles entire subtrees — `/dashboard/employer` covers `/dashboard/employer/jobs`, `/dashboard/employer/applications`, everything under it. You never need to touch middleware again for new pages under existing route groups.
 
-**Layer 2 — `RoleGuard` component:** Use this for pages where the route is shared but content is role-specific, or as a fallback when you want a client-side double-check. You already have it built, just unwrap the commented-out code in `employer/jobs/page.tsx`:
+**Layer 2 — `RoleGuard` component:** Use this for pages where the route is shared but content is role-specific, or as a fallback when you want a client-side double-check.
 
 ```typescript
 export default function EmployerJobsPage() {

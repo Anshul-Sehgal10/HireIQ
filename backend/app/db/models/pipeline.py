@@ -76,7 +76,11 @@ class PipelineChannel(UUIDMixin, Base):
         unique=True,
     )
     stage: Mapped[PipelineStage] = mapped_column(
-        Enum(PipelineStage, name="pipeline_stage_enum"),
+        Enum(
+            PipelineStage,
+            values_callable=lambda e: [x.value for x in e],   # NEW
+            name="pipeline_stage_enum",
+        ),
         nullable=False,
         default=PipelineStage.SHORTLISTED,
         server_default=PipelineStage.SHORTLISTED.value,
@@ -201,10 +205,15 @@ class ChannelMessage(UUIDMixin, Base):
     )
 
     message_type: Mapped[MessageType] = mapped_column(
-        Enum(MessageType, name="message_type_enum"),
+        Enum(
+            MessageType,
+            values_callable=lambda e: [x.value for x in e],   # NEW
+            name="message_type_enum",
+        ),
         nullable=False,
         default=MessageType.BROADCAST,
     )
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
 
     sent_at: Mapped[object] = mapped_column(

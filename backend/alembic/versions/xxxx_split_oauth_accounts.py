@@ -9,7 +9,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 revision = "split_oauth_accounts"
-down_revision = "add_org_join_code"   # <-- confirm against your actual chain
+down_revision = "add_org_join_code"
 branch_labels = None
 depends_on = None
 

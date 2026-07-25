@@ -17,6 +17,7 @@ from .routes.pipeline import employer_router as pipeline_employer_router
 from .routes.pipeline import candidate_router as pipeline_candidate_router
 
 from .routes.admin import router as admin_router
+from .routes.org_chat import router as org_chat_router
  
 router = APIRouter()
  
@@ -37,3 +38,4 @@ router.include_router(pipeline_employer_router)
 router.include_router(pipeline_candidate_router)
 
 router.include_router(admin_router)
+router.include_router(org_chat_router)

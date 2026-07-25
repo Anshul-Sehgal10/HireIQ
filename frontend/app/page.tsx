@@ -1,5 +1,19 @@
 import Link from "next/link";
-import { Sparkles, ArrowRight, CheckCircle2 } from "lucide-react";
+import {
+  Sparkles,
+  ArrowRight,
+  CheckCircle2,
+  Users,
+  Briefcase,
+  Upload,
+  Search,
+  Timer,
+  TrendingUp,
+  ListChecks,
+  MessagesSquare,
+  Gauge,
+  ArrowLeftRight,
+} from "lucide-react";
 import ThemeToggle from "@/components/ui/ThemeToggle";
 import Button from "@/components/ui/Button";
 import TypingScenarioCard from "@/components/landing/TypingScenarioCard";
@@ -11,7 +25,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* ---------------------------------------------------------------- */}
-      {/* Header - floating glass pill, detached from the edge             */}
+      {/* Header - floating glass pill                                     */}
       {/* ---------------------------------------------------------------- */}
       <header className="sticky top-4 z-40 mx-auto w-full max-w-5xl px-4">
         <div className="flex h-14 items-center justify-between rounded-full border border-border/60 bg-background/70 px-5 shadow-lg shadow-black/5 backdrop-blur-xl">
@@ -48,27 +62,26 @@ export default function Home() {
       </header>
 
       {/* ---------------------------------------------------------------- */}
-      {/* Hero + Feature timeline - one continuous gradient background so  */}
-      {/* the two sections blend seamlessly instead of a hard section seam */}
+      {/* Hero + Feature timeline - one continuous background/clip context */}
       {/* ---------------------------------------------------------------- */}
-      <div className="relative">
+      <div className="relative overflow-hidden">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-20 bg-gradient-to-b from-background via-background to-muted/40"
         />
 
-        {/* Hero */}
-        <section className="relative flex min-h-[88vh] items-center overflow-hidden">
-          <ParallaxBlob
-            speed={0.18}
-            className="top-[-8rem] h-120 w-120 rounded-full bg-primary/15 blur-3xl"
-            style={{ left: "50%", marginLeft: "-15rem" }}
-          />
-          <ParallaxBlob
-            speed={-0.12}
-            className="bottom-[-6rem] right-[-4rem] h-96 w-96 rounded-full bg-primary/10 blur-3xl"
-          />
+        <ParallaxBlob
+          speed={0.18}
+          className="top-[-6rem] h-120 w-120 rounded-full bg-primary/15 blur-3xl"
+          style={{ left: "50%", marginLeft: "-15rem" }}
+        />
+        <ParallaxBlob
+          speed={-0.1}
+          className="top-[60vh] right-[-4rem] h-96 w-96 rounded-full bg-primary/10 blur-3xl"
+        />
 
+        {/* Hero */}
+        <section className="relative flex min-h-[88vh] items-center">
           <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-12 px-6 py-14 md:grid-cols-2 md:py-16">
             <div className="flex flex-col justify-center animate-fade-in">
               {/* <span className="mb-5 inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
@@ -118,13 +131,9 @@ export default function Home() {
         </section>
 
         {/* Feature timeline */}
-        <section id="scenario-engine" className="relative overflow-hidden py-24">
+        <section id="scenario-engine" className="relative py-24">
           <div
             className="absolute inset-0 bg-dot-grid opacity-40 [mask-image:radial-gradient(ellipse_60%_60%_at_50%_45%,black,transparent)]"
-            aria-hidden="true"
-          />
-          <div
-            className="pointer-events-none absolute left-1/2 top-1/3 h-96 w-96 -translate-x-1/2 rounded-full bg-primary/10 blur-3xl"
             aria-hidden="true"
           />
 
@@ -151,35 +160,71 @@ export default function Home() {
       </div>
 
       {/* ---------------------------------------------------------------- */}
-      {/* How it works - split by role                                     */}
+      {/* How it works - two connected paths with a center connector       */}
       {/* ---------------------------------------------------------------- */}
-      <section id="how-it-works" className="py-20">
+      <section id="how-it-works" className="relative py-24">
+        <div
+          className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl"
+          aria-hidden="true"
+        />
+
         <div className="mx-auto max-w-6xl px-6">
-          <div className="grid gap-6 md:grid-cols-2">
+          <ScrollReveal className="mx-auto mb-14 max-w-2xl text-center">
+            {/* <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+              <ArrowLeftRight size={12} />
+              The workflow
+            </span> */}
+            <h2 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+              One platform, <span className="text-primary">two paths that meet in the middle</span>
+            </h2>
+            <p className="mt-4 text-base text-muted-foreground">
+              Candidates and employers move through the same pipeline from opposite ends -
+              here's what each side actually does.
+            </p>
+          </ScrollReveal>
+
+          <div className="relative grid gap-8 md:grid-cols-2 md:gap-6">
+            {/* Center connector - desktop only */}
+            <div
+              className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-border md:block"
+              aria-hidden="true"
+            />
+            <div
+              className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-primary shadow-md md:flex"
+              aria-hidden="true"
+            >
+              <ArrowLeftRight size={18} />
+            </div>
+
             <ScrollReveal>
               <RolePathCard
+                icon={Users}
                 eyebrow="For candidates"
                 title="Apply less. Get seen more."
+                tagline="Your resume works for you instead of disappearing into a pile."
                 steps={[
-                  "Upload your resume once - we embed it and match it against every open role.",
-                  "See a personalized, ranked feed instead of a generic job board.",
-                  "Prove yourself with a scenario, not just a polished PDF.",
-                  "Track every application live - no more email black holes.",
+                  { icon: Upload, text: "Upload your resume once - we embed it and match it against every open role." },
+                  { icon: Search, text: "See a personalized, ranked feed instead of a generic job board." },
+                  { icon: Timer, text: "Prove yourself with a scenario, not just a polished PDF." },
+                  { icon: TrendingUp, text: "Track every application live - no more email black holes." },
                 ]}
                 ctaLabel="Find your next role"
                 href="/auth/register"
               />
             </ScrollReveal>
+
             <ScrollReveal delay={120}>
               <RolePathCard
                 id="for-employers"
+                icon={Briefcase}
                 eyebrow="For employers"
                 title="Screen for thinking, not prompting."
+                tagline="Spend time on candidates who've already proven real ability."
                 steps={[
-                  "Post a role and optionally enable the Scenario Engine - no setup beyond a toggle.",
-                  "Get a ranked candidate list with match score, scenario score, and an AI summary.",
-                  "Manage the entire pipeline in one broadcast channel - no spreadsheets.",
-                  "See live token cost per job, per hire - full cost transparency.",
+                  { icon: Briefcase, text: "Post a role and optionally enable the Scenario Engine - no setup beyond a toggle." },
+                  { icon: ListChecks, text: "Get a ranked candidate list with match score, scenario score, and an AI summary." },
+                  { icon: MessagesSquare, text: "Manage the entire pipeline in one broadcast channel - no spreadsheets." },
+                  { icon: Gauge, text: "See live token cost per job, per hire - full cost transparency." },
                 ]}
                 ctaLabel="Start hiring"
                 href="/auth/register"
@@ -217,38 +262,70 @@ export default function Home() {
 // Local subcomponents
 // ---------------------------------------------------------------------------
 
+interface RoleStep {
+  icon: React.ElementType;
+  text: string;
+}
+
 function RolePathCard({
   id,
+  icon: Icon,
   eyebrow,
   title,
+  tagline,
   steps,
   ctaLabel,
   href,
 }: {
   id?: string;
+  icon: React.ElementType;
   eyebrow: string;
   title: string;
-  steps: string[];
+  tagline: string;
+  steps: RoleStep[];
   ctaLabel: string;
   href: string;
 }) {
   return (
-    <div id={id} className="rounded-2xl border border-border bg-card p-8">
-      <span className="text-xs font-semibold uppercase tracking-widest text-primary">
-        {eyebrow}
-      </span>
-      <h3 className="mt-2 text-xl font-bold text-foreground">{title}</h3>
-      <ol className="mt-6 space-y-4">
-        {steps.map((step, i) => (
-          <li key={i} className="flex gap-3 text-sm text-muted-foreground">
-            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-foreground">
-              {i + 1}
-            </span>
-            {step}
-          </li>
-        ))}
+    <div
+      id={id}
+      className="group relative h-full rounded-2xl border border-border bg-card p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
+    >
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
+          <Icon size={20} />
+        </div>
+        <div>
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</span>
+          <h3 className="text-lg font-bold text-foreground">{title}</h3>
+        </div>
+      </div>
+
+      <p className="mb-6 text-sm text-muted-foreground">{tagline}</p>
+
+      <ol className="space-y-5">
+        {steps.map((step, i) => {
+          const StepIcon = step.icon;
+          const isLast = i === steps.length - 1;
+          return (
+            <li key={i} className="relative flex gap-4">
+              {!isLast && (
+                <span
+                  className="absolute left-[15px] top-8 w-px bg-border"
+                  style={{ height: "calc(100% - 0.25rem)" }}
+                  aria-hidden="true"
+                />
+              )}
+              <span className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition-colors duration-300 group-hover:border-primary/40 group-hover:text-primary">
+                <StepIcon size={14} />
+              </span>
+              <p className="pt-1 text-sm text-muted-foreground">{step.text}</p>
+            </li>
+          );
+        })}
       </ol>
-      <Link href={href} className="mt-7 block">
+
+      <Link href={href} className="mt-8 block">
         <Button variant="outline" className="w-full" rightIcon={<ArrowRight size={16} />}>
           {ctaLabel}
         </Button>

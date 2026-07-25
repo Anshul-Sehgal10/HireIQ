@@ -19,21 +19,28 @@ Security: both flows use a per-request state cookie under different names
 so a login attempt and a connect attempt in overlapping tabs can't clobber
 each other's state.
 """
-
+# Types
 import secrets
 from typing import Annotated
 
-from authlib.integrations.httpx_client import AsyncOAuth2Client
+# FastAPI and SQLAlchemy
+from authlib.integrations.httpx_client import AsyncOAuth2Client # OAuth client by authlib
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Core modules
 from app.core.config import settings
 from app.core.dependencies import CurrentUser, get_db
-from app.core.security import create_access_token, create_refresh_token
+from app.core.security import create_access_token, create_refresh_token, create_oauth_pending_token
+
+# Database models
 from app.db.models.user import OAuthProvider
+
+# Repository and CRUD functions
 from app.repositories import oauth_repo
-from app.repositories.user_repo import upsert_oauth_user
+from app.repositories.user_repo import find_existing_oauth_user
+
 
 router = APIRouter(prefix="/auth", tags=["oauth"])
 
@@ -161,31 +168,43 @@ async def oauth_callback(
     if not user_data["provider_account_id"]:
         raise HTTPException(400, f"Could not retrieve account ID from {provider}")
 
-    user = await upsert_oauth_user(
-        db,
-        provider=conf["provider_enum"],
-        provider_account_id=user_data["provider_account_id"],
-        email=user_data["email"],
-        full_name=user_data["full_name"],
+    user = await find_existing_oauth_user(
+        db, conf["provider_enum"], user_data["provider_account_id"], user_data["email"]
     )
+
+    if user is None:
+        # Brand-new signup — no User row created yet. Hand the browser a
+        # short-lived pending token instead of real session cookies.
+        pending_token = create_oauth_pending_token(
+            provider=conf["provider_enum"].value,
+            provider_account_id=user_data["provider_account_id"],
+            email=user_data["email"],
+            full_name=user_data["full_name"],
+        )
+        response = RedirectResponse(_build_redirect_to_frontend("/select-role"))
+        response.set_cookie(
+            key="oauth_pending_token", value=pending_token, max_age=900,
+            httponly=True, secure=not settings.DEBUG, samesite="lax", path="/",
+        )
+        response.delete_cookie(f"oauth_state_{provider}")
+        return response
+
+    if not user.is_active:
+        response = RedirectResponse(_build_redirect_to_frontend(error="account_blocked"))
+        response.delete_cookie(f"oauth_state_{provider}")
+        return response
 
     access_token = create_access_token(
-        str(user.id),
-        user.role.value if user.role else None,
-        {"email": user.email, "full_name": user.full_name},
+        str(user.id), user.role.value, {"email": user.email, "full_name": user.full_name},
     )
     refresh_token = create_refresh_token(str(user.id))
-
-    # role is None only for a brand-new OAuth signup.
-    redirect_path = "/onboarding/select-role" if user.role is None else "/auth/callback"
-    response = RedirectResponse(_build_redirect_to_frontend(path=redirect_path))
+    response = RedirectResponse(_build_redirect_to_frontend("/auth/callback"))
 
     from app.router.routes.auth import set_refresh_cookie, set_access_cookie
     set_refresh_cookie(response, refresh_token)
     set_access_cookie(response, access_token)
     response.delete_cookie(f"oauth_state_{provider}")
     return response
-
 
 # ---------------------------------------------------------------------------
 # Connect flow — link a provider to an already-logged-in user

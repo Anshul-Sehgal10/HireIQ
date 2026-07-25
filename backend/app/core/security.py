@@ -72,3 +72,26 @@ def decode_token(token: str) -> dict:
         settings.JWT_SECRET_KEY.get_secret_value(), 
         algorithms=[settings.JWT_ALGORITHM]
     )
+
+def create_oauth_pending_token(
+    provider: str, provider_account_id: str, email: str, full_name: str
+) -> str:
+    """
+    Carries an OAuth profile through the role-selection step for a
+    brand-new signup, before any User row exists. Deliberately NOT tied to
+    a user id — there isn't one yet. Short expiry since this only needs to
+    survive one redirect + one form submission.
+    """
+    expire = datetime.now(timezone.utc) + timedelta(minutes=15)
+    return jwt.encode(
+        {
+            "provider": provider,
+            "provider_account_id": provider_account_id,
+            "email": email,
+            "full_name": full_name,
+            "type": "oauth_pending",
+            "exp": expire,
+        },
+        settings.JWT_SECRET_KEY.get_secret_value(),
+        algorithm=settings.JWT_ALGORITHM,
+    )

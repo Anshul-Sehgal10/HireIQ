@@ -12,33 +12,47 @@ The implementation intentionally keeps route handlers thin by delegating
 database operations to repository modules and business logic to services.
 """
 
-
+# Types
 import uuid
 from typing import Annotated, List, Optional
 
+# FastAPI and SQLAlchemy
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+# Auth and logging
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
 from app.core.logging import logger
+
+# Storage and functions
+from app.storage import generate_presigned_download_url
+
+# Database models
 from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting, JobStatus
 from app.db.models.resume_versions import ResumeVersion
+
+# Repositories CRUD functions
 from app.repositories import application_repo, job_repo, scenario_repo
 from app.repositories.org_repo import get_org_for_user
+from app.repositories.resume_repo import increment_override_usage
+
+# Pydantic Schemas
 from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
     ApplicationWithJobResponse,
     EmployerApplicationResponse,
 )
+from app.schemas.resume import ResumeExtractionDetailResponse
+
+# Services for business logic
 from app.services.matching import compute_match_score
 from app.services.resume_selection import resolve_resume_version
 from app.services.override_quota import ensure_override_quota_current, is_unlimited
-from app.repositories.resume_repo import increment_override_usage
 
 router = APIRouter(prefix="/applications", tags=["applications"])
 
@@ -324,3 +338,76 @@ async def list_for_job(
         )
         for app, _profile_row, user_row in filtered_rows
     ]
+
+# ---------------------------------------------------------------------------
+# Employer — view the candidate's resume for a specific application
+# ---------------------------------------------------------------------------
+
+async def _get_owned_application_for_employer(
+    db: AsyncSession, application_id: uuid.UUID, user
+) -> tuple[Application, JobPosting]:
+    app = await application_repo.get_application_by_id(db, application_id)
+    if not app:
+        raise HTTPException(404, "Application not found")
+    job = await job_repo.get_job(db, app.job_id)
+    if not job:
+        raise HTTPException(404, "Job not found")
+    org = await get_org_for_user(db, user.id)
+    if not org or job.org_id != org.id:
+        raise HTTPException(403, "Not your job")
+    return app, job
+
+
+@router.get(
+    "/{application_id}/candidate-resume",
+    response_model=ResumeExtractionDetailResponse,
+)
+async def get_candidate_resume(
+    application_id: uuid.UUID,
+    user: EmployerUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Returns the structured extraction for the exact resume version locked
+    at application time — not the candidate's current live resume, which
+    may have changed since. Consistent with how match_score is computed
+    and never recomputed.
+    """
+    app, _job = await _get_owned_application_for_employer(db, application_id, user)
+
+    result = await db.execute(
+        select(ResumeVersion).where(ResumeVersion.id == app.resume_version_id)
+    )
+    rv = result.scalar_one_or_none()
+    if not rv:
+        raise HTTPException(404, "Resume version not found")
+
+    return ResumeExtractionDetailResponse(
+        id=rv.id,
+        version_number=rv.version_number,
+        label=rv.label,
+        categories=rv.categories,
+        parsed_data=rv.parsed_data,
+        has_embedding=rv.embedding is not None,
+    )
+
+
+@router.get("/{application_id}/candidate-resume/download-url")
+async def get_candidate_resume_download_url(
+    application_id: uuid.UUID,
+    user: EmployerUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Presigned GET URL to view/download the actual resume file (PDF/DOCX),
+    not just the structured extraction."""
+    app, _job = await _get_owned_application_for_employer(db, application_id, user)
+
+    result = await db.execute(
+        select(ResumeVersion).where(ResumeVersion.id == app.resume_version_id)
+    )
+    rv = result.scalar_one_or_none()
+    if not rv:
+        raise HTTPException(404, "Resume version not found")
+
+    url = generate_presigned_download_url(rv.s3_key)
+    return {"download_url": url, "expires_in_seconds": 900}
