@@ -128,8 +128,8 @@ export default function TypingScenarioCard() {
         if (barRef.current) {
           const elapsedPct = Math.max(0, Math.min(1, elapsed / totalMs));
           barRef.current.style.width = `${elapsedPct * 100}%`;
-          barRef.current.classList.toggle("bg-danger", urgent);
-          barRef.current.classList.toggle("bg-primary", !urgent);
+          // barRef.current.classList.toggle("bg-danger", urgent);
+          // barRef.current.classList.toggle("bg-primary", !urgent);
         }
 
         if (elapsed < totalMs) {

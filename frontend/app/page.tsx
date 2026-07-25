@@ -23,15 +23,15 @@ import FeatureTimeline from "@/components/landing/FeatureTimeline";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
       {/* ---------------------------------------------------------------- */}
       {/* Header - floating glass pill                                     */}
       {/* ---------------------------------------------------------------- */}
-      <header className="sticky top-4 z-40 mx-auto w-full max-w-5xl px-4">
-        <div className="flex h-14 items-center justify-between rounded-full border border-border/60 bg-background/70 px-5 shadow-lg shadow-black/5 backdrop-blur-xl">
-          <Link href="/" className="group flex items-center gap-2.5">
-            <span className="h-2 w-2 rounded-full bg-primary transition-transform duration-300 group-hover:scale-125" />
-            <span className="text-base font-bold tracking-tight">HireIQ</span>
+      <header className="sticky top-3 z-40 mx-auto w-full max-w-5xl px-3 sm:top-4 sm:px-4">
+        <div className="flex h-13 items-center justify-between rounded-full border border-border/60 bg-background/70 px-3.5 shadow-lg shadow-black/5 backdrop-blur-xl sm:h-14 sm:px-5">
+          <Link href="/" className="group flex items-center gap-2 sm:gap-2.5">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-primary transition-transform duration-300 group-hover:scale-125" />
+            <span className="text-sm font-bold tracking-tight sm:text-base">HireIQ</span>
           </Link>
 
           <nav className="hidden items-center gap-7 text-sm font-medium text-muted-foreground md:flex">
@@ -46,7 +46,7 @@ export default function Home() {
             </a>
           </nav>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <ThemeToggle />
             <Link
               href="/auth/login"
@@ -72,58 +72,45 @@ export default function Home() {
 
         <ParallaxBlob
           speed={0.18}
-          className="top-[-6rem] h-120 w-120 rounded-full bg-primary/15 blur-3xl"
-          style={{ left: "50%", marginLeft: "-15rem" }}
+          className="top-[-4rem] h-72 w-72 rounded-full bg-primary/15 blur-3xl sm:h-96 sm:w-96 sm:top-[-5rem] lg:top-[-6rem] lg:h-120 lg:w-120"
+          style={{ left: "50%", marginLeft: "-9rem" }}
         />
         <ParallaxBlob
           speed={-0.1}
-          className="top-[60vh] right-[-4rem] h-96 w-96 rounded-full bg-primary/10 blur-3xl"
+          className="top-[55vh] right-[-3rem] h-56 w-56 rounded-full bg-primary/10 blur-3xl sm:h-72 sm:w-72 sm:right-[-3.5rem] lg:top-[60vh] lg:h-96 lg:w-96 lg:right-[-4rem]"
         />
 
         {/* Hero */}
-        <section className="relative flex min-h-[88vh] items-center">
-          <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-12 px-6 py-14 md:grid-cols-2 md:py-16">
+        <section className="relative flex min-h-[auto] items-center py-16 sm:py-20 md:min-h-[88vh] md:py-0">
+          <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 sm:gap-12 sm:px-6 md:grid-cols-2 md:py-14 lg:py-16">
             <div className="flex flex-col justify-center animate-fade-in">
-              {/* <span className="mb-5 inline-flex w-fit items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <Sparkles size={12} />
-                The Behavioral Scenario Engine
-              </span> */}
-              <h1 className="text-4xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl">
+              <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">
                 A resume can be written by ChatGPT.
                 <br />
                 <span className="text-primary">A timed, live scenario can't.</span>
               </h1>
-              <p className="mt-5 max-w-lg text-base leading-relaxed text-muted-foreground">
+              <p className="mt-4 max-w-lg text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base">
                 Every applicant answers a role-specific scenario question, generated fresh from
                 the job description, inside a locked, time-boxed test environment. We don't just
                 grade the answer - we grade how they think. It's the one hiring signal AI-polish
                 can't fake.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link href="/auth/register">
+              <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row">
+                <Link href="/auth/register" className="w-full sm:w-auto">
                   <Button size="lg" rightIcon={<ArrowRight size={16} />} className="w-full sm:w-auto">
                     I'm hiring
                   </Button>
                 </Link>
-                <Link href="/auth/register">
+                <Link href="/auth/register" className="w-full sm:w-auto">
                   <Button size="lg" variant="outline" className="w-full sm:w-auto">
                     I'm looking for a job
                   </Button>
                 </Link>
               </div>
-              {/* <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-success" /> Employer-controlled, per job
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle2 size={14} className="text-success" /> Never the sole rejection
-                  reason
-                </span>
-              </div> */}
             </div>
 
-            <div className="flex items-center justify-center">
-              <div className="animate-float-slow">
+            <div className="flex items-center justify-center px-2 sm:px-0">
+              <div className="w-full max-w-sm animate-float-slow">
                 <TypingScenarioCard />
               </div>
             </div>
@@ -131,28 +118,24 @@ export default function Home() {
         </section>
 
         {/* Feature timeline */}
-        <section id="scenario-engine" className="relative py-24">
+        <section id="scenario-engine" className="relative py-16 sm:py-20 md:py-24">
           <div
             className="absolute inset-0 bg-dot-grid opacity-40 [mask-image:radial-gradient(ellipse_60%_60%_at_50%_45%,black,transparent)]"
             aria-hidden="true"
           />
 
-          <div className="relative mx-auto max-w-6xl px-6">
+          <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
             <ScrollReveal className="mx-auto max-w-2xl text-center">
-              {/* <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <Sparkles size={12} />
-                Why HireIQ
-              </span> */}
-              <h2 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+              <h2 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
                 Built to replace <span className="text-primary">the whole broken hiring loop</span>
               </h2>
-              <p className="mt-4 text-base text-muted-foreground">
+              <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
                 Not just a better job board - a pre-qualification, screening, and communication
                 layer, end to end.
               </p>
             </ScrollReveal>
 
-            <div className="mt-16">
+            <div className="mt-10 sm:mt-14 md:mt-16">
               <FeatureTimeline />
             </div>
           </div>
@@ -162,28 +145,24 @@ export default function Home() {
       {/* ---------------------------------------------------------------- */}
       {/* How it works - two connected paths with a center connector       */}
       {/* ---------------------------------------------------------------- */}
-      <section id="how-it-works" className="relative py-24">
+      <section id="how-it-works" className="relative py-16 sm:py-20 md:py-24">
         <div
           className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/5 blur-3xl"
           aria-hidden="true"
         />
 
-        <div className="mx-auto max-w-6xl px-6">
-          <ScrollReveal className="mx-auto mb-14 max-w-2xl text-center">
-            {/* <span className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              <ArrowLeftRight size={12} />
-              The workflow
-            </span> */}
-            <h2 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+          <ScrollReveal className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
+            <h2 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
               One platform, <span className="text-primary">two paths that meet in the middle</span>
             </h2>
-            <p className="mt-4 text-base text-muted-foreground">
+            <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
               Candidates and employers move through the same pipeline from opposite ends -
               here's what each side actually does.
             </p>
           </ScrollReveal>
 
-          <div className="relative grid gap-8 md:grid-cols-2 md:gap-6">
+          <div className="relative grid gap-6 sm:gap-8 md:grid-cols-2 md:gap-6">
             {/* Center connector - desktop only */}
             <div
               className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-border md:block"
@@ -237,13 +216,15 @@ export default function Home() {
       {/* ---------------------------------------------------------------- */}
       {/* Footer                                                           */}
       {/* ---------------------------------------------------------------- */}
-      <footer className="border-t border-border py-10">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-6 text-sm text-muted-foreground sm:flex-row">
+      <footer className="border-t border-border py-8 sm:py-10">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-4 text-center text-xs text-muted-foreground sm:px-6 sm:text-sm sm:flex-row sm:text-left">
           <div className="flex items-center gap-2">
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             <span className="font-semibold text-foreground">HireIQ</span>
           </div>
-          <p>AI-native hiring - built for people who ship products, not just features.</p>
+          <p className="max-w-xs sm:max-w-none">
+            AI-native hiring - built for people who ship products, not just features.
+          </p>
           <div className="flex items-center gap-4">
             <Link href="/auth/login" className="hover:text-foreground transition-colors">
               Sign in
@@ -289,26 +270,26 @@ function RolePathCard({
   return (
     <div
       id={id}
-      className="group relative h-full rounded-2xl border border-border bg-card p-8 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl"
+      className="group relative h-full rounded-2xl border border-border bg-card p-6 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-xl sm:p-8"
     >
-      <div className="mb-6 flex items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110">
+      <div className="mb-5 flex items-center gap-3 sm:mb-6">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-300 group-hover:scale-110 sm:h-11 sm:w-11">
           <Icon size={20} />
         </div>
         <div>
           <span className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</span>
-          <h3 className="text-lg font-bold text-foreground">{title}</h3>
+          <h3 className="text-base font-bold text-foreground sm:text-lg">{title}</h3>
         </div>
       </div>
 
-      <p className="mb-6 text-sm text-muted-foreground">{tagline}</p>
+      <p className="mb-5 text-sm text-muted-foreground sm:mb-6">{tagline}</p>
 
-      <ol className="space-y-5">
+      <ol className="space-y-4 sm:space-y-5">
         {steps.map((step, i) => {
           const StepIcon = step.icon;
           const isLast = i === steps.length - 1;
           return (
-            <li key={i} className="relative flex gap-4">
+            <li key={i} className="relative flex gap-3.5 sm:gap-4">
               {!isLast && (
                 <span
                   className="absolute left-[15px] top-8 w-px bg-border"
@@ -325,7 +306,7 @@ function RolePathCard({
         })}
       </ol>
 
-      <Link href={href} className="mt-8 block">
+      <Link href={href} className="mt-7 block sm:mt-8">
         <Button variant="outline" className="w-full" rightIcon={<ArrowRight size={16} />}>
           {ctaLabel}
         </Button>

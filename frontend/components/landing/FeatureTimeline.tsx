@@ -80,6 +80,10 @@ function yToLengthFraction(targetY: number, samples: Sample[]): number {
   return a.frac + t * (b.frac - a.frac);
 }
 
+function findStepIndex(steps: Sample[], elapsed: number): number {
+  return -1; // unused placeholder removed below
+}
+
 export default function FeatureTimeline() {
   const [width, setWidth] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -171,82 +175,113 @@ export default function FeatureTimeline() {
   );
 
   return (
-    <div ref={setContainerRef} className="relative mx-auto w-full max-w-5xl">
-      {width > 0 && (
-        <svg
-          className="absolute inset-0 h-full w-full"
-          viewBox={`0 0 ${width} ${TOTAL_HEIGHT}`}
-          fill="none"
-          aria-hidden="true"
-        >
-          <path ref={trackPathRef} d={path} stroke="var(--border)" strokeWidth={2} />
-          <path
-            ref={progressPathRef}
-            d={path}
-            stroke="var(--primary)"
-            strokeWidth={2}
-            strokeLinecap="round"
-            pathLength={1}
-            strokeDasharray={1}
-            strokeDashoffset={1}
-          />
-        </svg>
-      )}
-
-      <div className="relative">
-        {FEATURES.map((item, i) => {
+    <>
+      {/* -------------------------------------------------------------- */}
+      {/* Mobile / tablet (< lg): simple stacked list, no scroll-driven   */}
+      {/* zigzag layout - the fixed pixel grid + SVG connector doesn't    */}
+      {/* have room to breathe below desktop widths.                     */}
+      {/* -------------------------------------------------------------- */}
+      <div className="space-y-3.5 lg:hidden">
+        {FEATURES.map((item) => {
           const Icon = item.icon;
-          const isLeft = i % 2 === 0;
-
           return (
             <ScrollReveal key={item.title}>
-              <div
-                className="grid items-center"
-                style={{ height: ROW_HEIGHT, gridTemplateColumns: `1fr ${ICON_COL_WIDTH}px 1fr` }}
-              >
-                <div>
-                  {isLeft && (
-                    <div
-                      ref={(el) => { cardRefs.current[i] = el; }}
-                      style={{ marginRight: CARD_GAP }}
-                      className="rounded-xl border border-border/70 bg-card/50 p-5 text-right shadow-lg shadow-black/5 backdrop-blur-md transition-colors duration-500"
-                    >
-                      <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
-                      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  )}
+              <div className="flex items-start gap-3.5 rounded-xl border border-border/70 bg-card/50 p-4 shadow-sm backdrop-blur-md sm:gap-4 sm:p-5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-border bg-card text-primary sm:h-11 sm:w-11">
+                  <Icon size={18} />
                 </div>
-
-                <div className="flex items-center justify-center">
-                  <div
-                    ref={(el) => { iconRefs.current[i] = el; }}
-                    className="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-all duration-500"
-                  >
-                    <Icon size={24} />
-                  </div>
-                </div>
-
-                <div>
-                  {!isLeft && (
-                    <div
-                      ref={(el) => { cardRefs.current[i] = el; }}
-                      style={{ marginLeft: CARD_GAP }}
-                      className="rounded-xl border border-border/70 bg-card/50 p-5 text-left shadow-lg shadow-black/5 backdrop-blur-md transition-colors duration-500"
-                    >
-                      <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
-                      <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-                        {item.description}
-                      </p>
-                    </div>
-                  )}
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                  <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                    {item.description}
+                  </p>
                 </div>
               </div>
             </ScrollReveal>
           );
         })}
       </div>
-    </div>
+
+      {/* -------------------------------------------------------------- */}
+      {/* Desktop (lg+): interactive scroll-driven zigzag timeline        */}
+      {/* -------------------------------------------------------------- */}
+      <div ref={setContainerRef} className="relative mx-auto hidden w-full max-w-5xl lg:block">
+        {width > 0 && (
+          <svg
+            className="absolute inset-0 h-full w-full"
+            viewBox={`0 0 ${width} ${TOTAL_HEIGHT}`}
+            fill="none"
+            aria-hidden="true"
+          >
+            <path ref={trackPathRef} d={path} stroke="var(--border)" strokeWidth={2} />
+            <path
+              ref={progressPathRef}
+              d={path}
+              stroke="var(--primary)"
+              strokeWidth={2}
+              strokeLinecap="round"
+              pathLength={1}
+              strokeDasharray={1}
+              strokeDashoffset={1}
+            />
+          </svg>
+        )}
+
+        <div className="relative">
+          {FEATURES.map((item, i) => {
+            const Icon = item.icon;
+            const isLeft = i % 2 === 0;
+
+            return (
+              <ScrollReveal key={item.title}>
+                <div
+                  className="grid items-center"
+                  style={{ height: ROW_HEIGHT, gridTemplateColumns: `1fr ${ICON_COL_WIDTH}px 1fr` }}
+                >
+                  <div>
+                    {isLeft && (
+                      <div
+                        ref={(el) => { cardRefs.current[i] = el; }}
+                        style={{ marginRight: CARD_GAP }}
+                        className="rounded-xl border border-border/70 bg-card/50 p-5 text-right shadow-lg shadow-black/5 backdrop-blur-md transition-colors duration-500"
+                      >
+                        <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                          {item.description}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-center">
+                    <div
+                      ref={(el) => { iconRefs.current[i] = el; }}
+                      className="relative z-10 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-card text-muted-foreground transition-all duration-500"
+                    >
+                      <Icon size={24} />
+                    </div>
+                  </div>
+
+                  <div>
+                    {!isLeft && (
+                      <div
+                        ref={(el) => { cardRefs.current[i] = el; }}
+                        style={{ marginLeft: CARD_GAP }}
+                        className="rounded-xl border border-border/70 bg-card/50 p-5 text-left shadow-lg shadow-black/5 backdrop-blur-md transition-colors duration-500"
+                      >
+                        <h3 className="text-sm font-semibold text-foreground">{item.title}</h3>
+                        <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
+                          {item.description}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </ScrollReveal>
+            );
+          })}
+        </div>
+      </div>
+    </>
   );
 }
