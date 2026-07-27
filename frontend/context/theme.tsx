@@ -13,6 +13,16 @@ import type { ReactNode } from "react";
  * pre-hydration <script> into <html> that sets this attribute before first
  * paint, which is what makes this flash-free — no blocking script needed
  * in layout.tsx anymore.
+ *
+ * disableTransitionOnChange is back ON: the theme-switch animation is now
+ * handled entirely by the View Transition API circle-reveal in
+ * ThemeToggle.tsx — a single, unified page-level animation. Leaving normal
+ * CSS transitions enabled during the attribute swap let every component's
+ * own transition-colors utility fire independently (different durations,
+ * different elements finishing at different times), which is exactly what
+ * produced the "laggy, out-of-sync" feel. next-themes' built-in
+ * disableTransitionOnChange briefly suppresses all CSS transitions during
+ * the swap so the circle-reveal is the only visible animation.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
   return (

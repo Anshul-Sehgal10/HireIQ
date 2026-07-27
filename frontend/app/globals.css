@@ -144,6 +144,34 @@ body {
   color: var(--primary-foreground);
 }
 
+/* Theme-switch animation: a circle wipes out from the toggle button,
+   revealing the new theme underneath. Origin/radius are supplied as CSS
+   custom properties set on <html> right before the transition starts (see
+   ThemeToggle.tsx), and the reveal itself is a plain CSS @keyframes
+   animation — not a JS Element.animate() call. Driving it via CSS avoids
+   a race with the browser's own default crossfade animation on
+   ::view-transition-new(root): a JS animate() call fired inside
+   `transition.ready.then()` can lose that race and let the default
+   center-crossfade play instead of the circle. A real CSS animation on
+   the pseudo-element runs from frame one, so nothing can beat it to it. */
+@keyframes circle-reveal {
+  from {
+    clip-path: circle(0px at var(--reveal-x, 50%) var(--reveal-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--reveal-r, 150%) at var(--reveal-x, 50%) var(--reveal-y, 50%));
+  }
+}
+
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: circle-reveal 550ms ease-in-out;
+  mix-blend-mode: normal;
+}
+
 @keyframes fade-in {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -175,11 +203,6 @@ body {
   .animate-auth-panel-left { animation: auth-panel-in-left 750ms cubic-bezier(0.16, 1, 0.3, 1); }
   .animate-auth-panel-right { animation: auth-panel-in-right 750ms cubic-bezier(0.16, 1, 0.3, 1); }
   .animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 420ms;
-    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-  }
 }
 
 .scrollbar-none {
@@ -218,4 +241,24 @@ body {
    "focused" - matches --primary in both themes via color-mix. */
 .typing-box-glow {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+/* Liquid-glass navbar — Apple-style frosted glass: heavy blur + saturation,
+   a soft light-catching top highlight, and a hairline border that reads as
+   a "glass edge" in both themes. Built from color-mix against the existing
+   --card/--foreground tokens so it never needs a hand-maintained dark-mode
+   duplicate — it just tracks whatever theme is active. */
+.glass-nav {
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent);
+  box-shadow:
+    0 8px 32px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 color-mix(in srgb, white 25%, transparent);
+}
+[data-theme='dark'] .glass-nav {
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
 }

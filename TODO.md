@@ -22,6 +22,7 @@ The Todos for the user, ai model ignore this section
 - [ ] Turn org chat into live socket chat, as we will need it later for jobchat as well, or should we use http polling?
 - [ ] Employers can't join orgs by invite link, discard the link and org id system entirely, unnecessary complexity, they need code to join the org
 - [ ] Per job candidate count visible on job posting page to employers
+- [ ] Fix theme change animation on landing page
 
 ## Bugs
 

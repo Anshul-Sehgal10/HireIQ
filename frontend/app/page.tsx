@@ -1,8 +1,6 @@
 import Link from "next/link";
 import {
-  Sparkles,
   ArrowRight,
-  CheckCircle2,
   Users,
   Briefcase,
   Upload,
@@ -12,9 +10,9 @@ import {
   ListChecks,
   MessagesSquare,
   Gauge,
-  ArrowLeftRight,
 } from "lucide-react";
-import ThemeToggle from "@/components/ui/ThemeToggle";
+import { FaGithub } from "react-icons/fa";
+import LandingHeader from "@/components/landing/LandingHeader";
 import Button from "@/components/ui/Button";
 import TypingScenarioCard from "@/components/landing/TypingScenarioCard";
 import ScrollReveal from "@/components/landing/ScrollReveal";
@@ -24,47 +22,14 @@ import FeatureTimeline from "@/components/landing/FeatureTimeline";
 export default function Home() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-background text-foreground">
-      {/* ---------------------------------------------------------------- */}
-      {/* Header - floating glass pill                                     */}
-      {/* ---------------------------------------------------------------- */}
-      <header className="sticky top-3 z-40 mx-auto w-full max-w-5xl px-3 sm:top-4 sm:px-4">
-        <div className="flex h-13 items-center justify-between rounded-full border border-border/60 bg-background/70 px-3.5 shadow-lg shadow-black/5 backdrop-blur-xl sm:h-14 sm:px-5">
-          <Link href="/" className="group flex items-center gap-2 sm:gap-2.5">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-primary transition-transform duration-300 group-hover:scale-125" />
-            <span className="text-sm font-bold tracking-tight sm:text-base">HireIQ</span>
-          </Link>
-
-          <nav className="hidden items-center gap-7 text-sm font-medium text-muted-foreground md:flex">
-            <a href="#scenario-engine" className="hover:text-foreground transition-colors">
-              Scenario Engine
-            </a>
-            <a href="#how-it-works" className="hover:text-foreground transition-colors">
-              How it works
-            </a>
-            <a href="#for-employers" className="hover:text-foreground transition-colors">
-              For employers
-            </a>
-          </nav>
-
-          <div className="flex items-center gap-1 sm:gap-2">
-            <ThemeToggle />
-            <Link
-              href="/auth/login"
-              className="hidden sm:inline-flex h-8 items-center px-3 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Sign in
-            </Link>
-            <Link href="/auth/register">
-              <Button size="sm">Get started</Button>
-            </Link>
-          </div>
-        </div>
-      </header>
+      <LandingHeader />
 
       {/* ---------------------------------------------------------------- */}
       {/* Hero + Feature timeline - one continuous background/clip context */}
+      {/* pt-* compensates for the now-fixed LandingHeader, which no       */}
+      {/* longer reserves layout space the way the old sticky header did. */}
       {/* ---------------------------------------------------------------- */}
-      <div className="relative overflow-hidden">
+      <div className="relative overflow-hidden pt-20 sm:pt-24">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-20 bg-gradient-to-b from-background via-background to-muted/40"
@@ -81,7 +46,7 @@ export default function Home() {
         />
 
         {/* Hero */}
-        <section className="relative flex min-h-[auto] items-center py-16 sm:py-20 md:min-h-[88vh] md:py-0">
+        <section className="relative flex min-h-[auto] items-center py-16 sm:py-20 md:min-h-[80vh] md:py-0">
           <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 sm:gap-12 sm:px-6 md:grid-cols-2 md:py-14 lg:py-16">
             <div className="flex flex-col justify-center animate-fade-in">
               <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">
@@ -168,12 +133,12 @@ export default function Home() {
               className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-border md:block"
               aria-hidden="true"
             />
-            <div
+            {/* <div
               className="pointer-events-none absolute left-1/2 top-1/2 z-10 hidden h-11 w-11 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-card text-primary shadow-md md:flex"
               aria-hidden="true"
             >
               <ArrowLeftRight size={18} />
-            </div>
+            </div> */}
 
             <ScrollReveal>
               <RolePathCard
@@ -222,9 +187,26 @@ export default function Home() {
             <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             <span className="font-semibold text-foreground">HireIQ</span>
           </div>
-          <p className="max-w-xs sm:max-w-none">
-            AI-native hiring - built for people who ship products, not just features.
-          </p>
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-3">
+            <p className="max-w-xs sm:max-w-none">
+              AI-native hiring - built for people who ship products, not just features.
+            </p>
+            <span aria-hidden="true" className="text-muted-foreground/70">
+              •
+            </span>
+            <div className="flex items-center justify-center gap-2">
+              <a
+                href="https://github.com/Anshul-Sehgal10"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="transition-colors hover:text-foreground"
+                aria-label="Visit HireIQ GitHub"
+              >
+                <FaGithub size={14} />
+              </a>
+              <p className="max-w-xs sm:max-w-none">Made by @Anshul-Sehgal10</p>
+            </div>
+          </div>
           <div className="flex items-center gap-4">
             <Link href="/auth/login" className="hover:text-foreground transition-colors">
               Sign in
