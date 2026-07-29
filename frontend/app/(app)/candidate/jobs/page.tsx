@@ -508,22 +508,6 @@ function JobFeed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDraft]);
 
-  // JobDetailModal already performs the withdraw API call itself before
-  // calling this — this only needs to sync local state. Calling the
-  // endpoint a second time here always failed with "already withdrawn"
-  // and left the feed showing stale status until a manual refresh.
-  const handleWithdrawn = (jobId: string) => {
-    const application = applications.find(
-      (a) => a.job_id === jobId && a.status !== "withdrawn",
-    );
-    if (!application) return;
-    setApplications((prev) =>
-      prev.map((a) =>
-        a.id === application.id ? { ...a, status: "withdrawn" } : a,
-      ),
-    );
-  };
-
   if (feedStatus === "resume_required") {
     return (
       <div className="mx-auto max-w-lg p-8">
@@ -657,21 +641,12 @@ function JobFeed() {
       {detailJobId && (
         <JobDetailModal
           jobId={detailJobId}
-          resumeVersions={resumeVersions}
           application={
             applications.find(
               (a) => a.job_id === detailJobId && a.status !== "withdrawn",
             ) as any
           }
           onClose={() => setDetailJobId(null)}
-          onApplied={(application) => {
-            setApplications((prev) => [...prev, application] as any);
-            setDetailJobId(null);
-          }}
-          onWithdrawn={(jobId) => {
-            handleWithdrawn(jobId);
-            setDetailJobId(null);
-          }}
         />
       )}
     </div>

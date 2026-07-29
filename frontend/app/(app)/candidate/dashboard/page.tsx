@@ -124,22 +124,17 @@ function DashboardContent() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
-  const load = async () => {
+const load = async () => {
     setLoading(true);
     try {
-      const [overviewRes, appsRes, resumeVersionsRes] = await Promise.all([
+      const [overviewRes, appsRes] = await Promise.all([
         apiFetch("/candidates/me/overview"),
         apiFetch("/applications/mine"),
-        apiFetch("/resumes"),
       ]);
       if (overviewRes.ok) setOverview(await overviewRes.json());
       if (appsRes.ok) {
         const data = await appsRes.json();
         setApplications(Array.isArray(data) ? data : []);
-      }
-      if (resumeVersionsRes.ok) {
-        const data = await resumeVersionsRes.json();
-        setResumeVersions(Array.isArray(data) ? data : []);
       }
     } finally {
       setLoading(false);
@@ -479,11 +474,8 @@ function DashboardContent() {
       {selectedJobId && (
         <JobDetailModal
           jobId={selectedJobId}
-          resumeVersions={resumeVersions}
           application={selectedApplication as any}
           onClose={() => setSelectedJobId(null)}
-          onApplied={() => setSelectedJobId(null)}
-          onWithdrawn={() => load()}
         />
       )}
     </div>
