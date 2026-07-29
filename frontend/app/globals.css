@@ -196,6 +196,10 @@ body {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-12px); }
 }
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 @media (prefers-reduced-motion: no-preference) {
   .animate-fade-in { animation: fade-in 150ms ease-out; }
   .animate-slide-over { animation: slide-over-in 180ms ease-out; }
@@ -203,6 +207,7 @@ body {
   .animate-auth-panel-left { animation: auth-panel-in-left 750ms cubic-bezier(0.16, 1, 0.3, 1); }
   .animate-auth-panel-right { animation: auth-panel-in-right 750ms cubic-bezier(0.16, 1, 0.3, 1); }
   .animate-float-slow { animation: float-slow 6s ease-in-out infinite; }
+  .animate-rise-in { animation: rise-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 }
 
 .scrollbar-none {

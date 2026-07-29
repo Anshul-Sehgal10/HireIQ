@@ -322,17 +322,6 @@ export default function JobDetailModal({
                   </div>
                 )}
 
-              {detail.scenario_enabled && application.scenario_ai_summary && (
-                <div className="rounded-lg border border-border bg-muted/30 p-3">
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Scenario feedback
-                  </p>
-                  <p className="text-sm text-foreground">
-                    {application.scenario_ai_summary}
-                  </p>
-                </div>
-              )}
-
               {application.is_override && (
                 <p className="text-xs text-warning">
                   You used a monthly override on this application.

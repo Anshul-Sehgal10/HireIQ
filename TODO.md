@@ -15,7 +15,7 @@ The Todos for the user, ai model ignore this section
 
 - [ ] The candidate cannot reapply to withdrawn applications from dashbaord
 - [ ] if shortlisted in a job and withdrawn, it still shows shortlisted in feed on that job
-- [ ] The candidate can see his own feedback after the scenario end, and in dashboard, only employer should see it
+- [ ] The candidate can see his own feedback after the scenario end, and in dashboard, only employer should see it - why change it to none? just update the pydantic schema
 - [ ] when candidate use override after submitting scenario, it should bring him back to dashboard or say applied or used override, instead it says 0% Meets the bar for this role Needed 50% to pass automatically.
 - [ ] The candidate ranking in pipeline is not working
 - [ ] Rejected label should be shown in red
@@ -25,7 +25,7 @@ The Todos for the user, ai model ignore this section
       What i think - When we block users independently, remove them from the org/any applied job as well, so they are totally isolated and prevents breaking the system, But when we block an org, the members stay in the org but gets blocked, and when we unblock the org, the members gets unblocked as well.
 
 - [ ] Turn org chat into live socket chat, as we will need it later for jobchat as well
-- [ ] Employers can't join orgs by invite link, discard the link and org id system entirely, unnecessary complexity, they just need code to join the org
+- [ ] Employers can't join orgs by invite link, discard the link and org id system entirely, unnecessary complexity, they just need code to join the org - remove the /org/invites backend
 - [ ] Per job candidate count visible on job posting page to employers
 - [ ] Fix theme change animation on landing page - confirmed that the theme toggle is shifted because of display scale and a chromium bug, set the scale to 100 and it will be perfect
 - [ ] Restructure the file by feature not type ([reference](https://chatgpt.com/c/6a6705f4-59bc-83ee-be9c-9b95691bae4a))

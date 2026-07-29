@@ -36,7 +36,7 @@ from app.db.models.job import JobPosting, JobStatus
 from app.db.models.resume_versions import ResumeVersion
 
 # Repositories CRUD functions
-from app.repositories import application_repo, job_repo, scenario_repo
+from app.repositories import application_repo, job_repo, scenario_repo, pipeline_repo
 from app.repositories.org_repo import get_org_for_user
 from app.repositories.resume_repo import increment_override_usage
 
@@ -104,7 +104,7 @@ def _build_with_job_response(
         org_name=org.name if org else "Unknown",
         scenario_enabled=job.scenario_enabled,
         scenario_score=scenario_response.score if scenario_response else None,
-        scenario_ai_summary=scenario_response.ai_summary if scenario_response else None,
+        scenario_ai_summary=None,  # employer-only — never surfaced to the candidate
         scenario_meets_threshold=(
             scenario_response.score >= job.scenario_score_threshold
             if scenario_response and scenario_response.score is not None
@@ -293,7 +293,15 @@ async def withdraw(
     if app.status in terminal:
         raise HTTPException(400, f"Application is already {app.status.value}")
 
-    return await application_repo.withdraw_application(db, app)
+    result = await application_repo.withdraw_application(db, app)
+
+    # If they were an active pipeline channel member (shortlisted or
+    # further), remove them — same cleanup reject_application does.
+    channel = await pipeline_repo.get_channel_by_job(db, app.job_id)
+    if channel:
+        await pipeline_repo.deactivate_member(db, channel.id, app.id)
+
+    return result
 
 
 # ---------------------------------------------------------------------------

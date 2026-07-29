@@ -317,90 +317,6 @@ function OrgContent() {
           </div>
         </section>
 
-        {/* Invite form — owner/recruiter only */}
-        {isOwner && (
-          <section>
-            <h2 className="text-xs font-semibold uppercase tracking-widest text-slate-500 mb-4">
-              Invite a colleague
-            </h2>
-            <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-              {inviteError && (
-                <p className="text-red-400 text-sm bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-                  {inviteError}
-                </p>
-              )}
-              <div className="flex gap-3">
-                <input
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  placeholder="colleague@company.com"
-                  className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500"
-                />
-                <select
-                  value={inviteRole}
-                  onChange={(e) =>
-                    setInviteRole(e.target.value as "recruiter" | "viewer")
-                  }
-                  className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                >
-                  <option value="recruiter">Recruiter</option>
-                  <option value="viewer">Viewer</option>
-                </select>
-                <button
-                  onClick={sendInvite}
-                  disabled={inviteLoading}
-                  className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium px-5 py-2.5 rounded-lg transition-colors whitespace-nowrap"
-                >
-                  {inviteLoading ? "Sending…" : "Send invite"}
-                </button>
-              </div>
-
-              {/* Pending invites */}
-              {invites.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-slate-800">
-                  <p className="text-xs text-slate-500 font-medium">
-                    Pending invites
-                  </p>
-                  {invites.map((inv) => (
-                    <div
-                      key={inv.id}
-                      className="flex items-center justify-between py-2"
-                    >
-                      <div>
-                        <span className="text-sm text-slate-200">
-                          {inv.invited_email}
-                        </span>
-                        <span className="ml-2 text-xs text-slate-500 capitalize">
-                          {inv.role}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {inv.token && (
-                          <button
-                            onClick={() => copyInviteLink(inv.token!)}
-                            className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
-                          >
-                            {copiedToken === inv.token
-                              ? "Copied!"
-                              : "Copy link"}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => cancelInvite(inv.id)}
-                          className="text-xs text-slate-500 hover:text-red-400 transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
         {/* Join requests — owner only */}
         {isOwner && requests.length > 0 && (
           <section>
@@ -469,18 +385,6 @@ function OrgContent() {
             </p>
           </section>
         )}
-
-        <section className="border-t border-slate-800 pt-8">
-          <p className="text-xs text-slate-600 mb-1 uppercase tracking-widest font-semibold">
-            Organisation ID
-          </p>
-          <p className="text-xs font-mono text-slate-500 select-all break-all">
-            {org.id}
-          </p>
-          <p className="text-xs text-slate-600 mt-1">
-            Fallback for colleagues who don't have the join code.
-          </p>
-        </section>
       </div>
     </div>
   );

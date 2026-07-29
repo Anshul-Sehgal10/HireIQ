@@ -154,3 +154,21 @@ async def get_job_with_org(db: AsyncSession, job_id: uuid.UUID) -> Optional[JobP
         .where(JobPosting.id == job_id)
     )
     return result.unique().scalar_one_or_none()
+
+async def count_applications_by_org_jobs(db: AsyncSession, org_id: uuid.UUID) -> dict[uuid.UUID, int]:
+    from app.db.models.application import Application
+    result = await db.execute(
+        select(Application.job_id, func.count())
+        .join(JobPosting, JobPosting.id == Application.job_id)
+        .where(JobPosting.org_id == org_id)
+        .group_by(Application.job_id)
+    )
+    return {row[0]: row[1] for row in result.all()}
+
+
+async def count_applications_by_job(db: AsyncSession, job_id: uuid.UUID) -> int:
+    from app.db.models.application import Application
+    result = await db.execute(
+        select(func.count()).select_from(Application).where(Application.job_id == job_id)
+    )
+    return result.scalar_one()

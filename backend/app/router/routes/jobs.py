@@ -10,26 +10,20 @@ from app.core.categories import JobCategory
 from app.core.pagination import encode_cursor
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
 
-from app.db.models.candidate_profiles import CandidateProfile
-from app.db.models.organization import VerificationStatus
 from app.repositories.job_repo import (
-    close_job,
-    create_job,
-    get_job,
-    list_jobs_by_org,
-    list_published_jobs,
-    publish_job,
-    update_job,
-    reprocess_job,
-    get_job_with_org,
+    close_job, create_job, get_job, list_jobs_by_org, list_published_jobs,
+    publish_job, update_job, reprocess_job, get_job_with_org,
+    count_applications_by_org_jobs, count_applications_by_job,
 )
 from app.repositories.org_repo import get_org_for_user
+
+from app.db.models.organization import VerificationStatus
+from app.db.models.candidate_profiles import CandidateProfile
 
 from app.schemas.job import (
     JobCreate, JobResponse, JobUpdate, JobDetailResponse,
     JobExtractionDetailResponse, JobFeedResponse,
 )
-
 from app.schemas.matching import RelevanceCheckResponse
 
 from app.services.matching import compute_match_score
@@ -56,11 +50,24 @@ async def list_mine(
     user: EmployerUser,
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    logger.info("Fetching organisation for user %s", user.full_name)
     org = await get_org_for_user(db, user.id)
     if not org:
         return []
-    return await list_jobs_by_org(db, org.id)
+    jobs = await list_jobs_by_org(db, org.id)
+    counts = await count_applications_by_org_jobs(db, org.id)
+    return [
+        JobResponse(
+            id=job.id, org_id=job.org_id, title=job.title, description=job.description,
+            status=job.status, work_mode=job.work_mode, job_level=job.job_level,
+            location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
+            hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
+            match_threshold=job.match_threshold, categories=job.categories,
+            scenario_score_threshold=job.scenario_score_threshold,
+            role_summary=job.role_summary,
+            applicant_count=counts.get(job.id, 0),
+        )
+        for job in jobs
+    ]
 
 
 @router.get("/meta/categories", response_model=List[str])
@@ -143,6 +150,7 @@ async def get_one(
         org_name=org.name if org else "Unknown",
         org_domain=org.domain if org else None,
         org_verification_status=org.verification_status.value if org else "pending",
+        applicant_count=await count_applications_by_job(db, job.id),
     )
 
 

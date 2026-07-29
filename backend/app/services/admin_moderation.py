@@ -125,6 +125,23 @@ async def block_org(
     return org
 
 
+async def _unblock_org_members(db: AsyncSession, org: Organization) -> list[uuid.UUID]:
+    """
+    Reactivates every currently-inactive member on org unblock. This is
+    intentionally blanket, mirroring _block_org_members being blanket on
+    the way in — if an admin wants to keep one specific member blocked for
+    an unrelated reason, they re-block that person individually afterward.
+    """
+    members = await org_repo.list_members(db, org.id)
+    reactivated: list[uuid.UUID] = []
+    for member in members:
+        user = await db.get(User, member.user_id)
+        if user and user.role != UserRole.ADMIN and not user.is_active:
+            user.is_active = True
+            reactivated.append(user.id)
+    return reactivated
+
+
 async def unblock_org(
     db: AsyncSession, org: Organization, admin_id: uuid.UUID, reason: Optional[str] = None
 ) -> Organization:
@@ -132,8 +149,11 @@ async def unblock_org(
         raise ValueError("Organisation is not currently blocked")
 
     org.verification_status = VerificationStatus.VERIFIED
+    reactivated_ids = await _unblock_org_members(db, org)
+
     db.add(admin_repo.build_audit_log(
-        admin_id, "org_unblock", "organization", org.id, {"reason": reason},
+        admin_id, "org_unblock", "organization", org.id,
+        {"reason": reason, "members_reactivated": [str(i) for i in reactivated_ids]},
     ))
     await db.commit()
     await db.refresh(org)
@@ -144,23 +164,6 @@ async def unblock_org(
 # User moderation
 # ---------------------------------------------------------------------------
 
-async def block_user(
-    db: AsyncSession, target: User, admin_id: uuid.UUID, reason: Optional[str] = None
-) -> User:
-    if target.role == UserRole.ADMIN:
-        raise ValueError("Admin accounts cannot be blocked through this endpoint")
-    if not target.is_active:
-        raise ValueError("User is already blocked")
-
-    target.is_active = False
-    db.add(admin_repo.build_audit_log(
-        admin_id, "user_block", "user", target.id, {"reason": reason},
-    ))
-    await db.commit()
-    await db.refresh(target)
-    return target
-
-
 async def unblock_user(
     db: AsyncSession, target: User, admin_id: uuid.UUID, reason: Optional[str] = None
 ) -> User:
@@ -170,6 +173,78 @@ async def unblock_user(
     target.is_active = True
     db.add(admin_repo.build_audit_log(
         admin_id, "user_unblock", "user", target.id, {"reason": reason},
+    ))
+    await db.commit()
+    await db.refresh(target)
+    return target
+
+async def _isolate_blocked_user(db: AsyncSession, target: User) -> dict:
+    """
+    Runs only on a direct, individual block (POST /admin/users/{id}/block) —
+    never on the org-wide block path (block_org), which deliberately leaves
+    membership/applications alone per the org-block design.
+
+    - Employer: removed from their organisation's membership.
+    - Candidate: every non-terminal application is withdrawn and any active
+      pipeline channel membership tied to it is deactivated — identical
+      cleanup to the candidate's own withdraw endpoint.
+
+    Unblocking does NOT reverse this — the user must manually rejoin an
+    org / reapply. That's intentional: "isolated" means isolated, not
+    "paused."
+    """
+    from app.db.models.application import Application, ApplicationStatus
+    from app.db.models.candidate_profiles import CandidateProfile
+    from app.repositories import application_repo, pipeline_repo
+    from sqlalchemy import select
+
+    meta: dict = {}
+
+    if target.role == UserRole.EMPLOYER:
+        membership = await org_repo.get_membership_for_user(db, target.id)
+        if membership:
+            org_id = membership.org_id
+            await org_repo.remove_member(db, org_id, target.id)
+            meta["removed_from_org"] = str(org_id)
+
+    elif target.role == UserRole.CANDIDATE:
+        result = await db.execute(
+            select(CandidateProfile).where(CandidateProfile.user_id == target.id)
+        )
+        profile = result.scalar_one_or_none()
+        if profile:
+            terminal = {ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED}
+            apps = await application_repo.list_applications_by_candidate(db, profile.id)
+            withdrawn_ids = []
+            for app in apps:
+                if app.status in terminal:
+                    continue
+                await application_repo.update_application_status(
+                    db, app, ApplicationStatus.WITHDRAWN
+                )
+                channel = await pipeline_repo.get_channel_by_job(db, app.job_id)
+                if channel:
+                    await pipeline_repo.deactivate_member(db, channel.id, app.id)
+                withdrawn_ids.append(app.id)
+            if withdrawn_ids:
+                meta["applications_withdrawn"] = [str(i) for i in withdrawn_ids]
+
+    return meta
+
+
+async def block_user(
+    db: AsyncSession, target: User, admin_id: uuid.UUID, reason: Optional[str] = None
+) -> User:
+    if target.role == UserRole.ADMIN:
+        raise ValueError("Admin accounts cannot be blocked through this endpoint")
+    if not target.is_active:
+        raise ValueError("User is already blocked")
+
+    target.is_active = False
+    isolation_meta = await _isolate_blocked_user(db, target)
+
+    db.add(admin_repo.build_audit_log(
+        admin_id, "user_block", "user", target.id, {"reason": reason, **isolation_meta},
     ))
     await db.commit()
     await db.refresh(target)

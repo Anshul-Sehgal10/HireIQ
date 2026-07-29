@@ -133,12 +133,16 @@ export default function ProfilePage() {
   const saveInfo = async () => {
     setInfoSaving(true);
     try {
+      if(email.trim() === "" || fullName.trim() === "") {
+        throw new Error("Please fill in all required fields");
+      }
       const res = await apiFetch("/auth/me", {
         method: "PATCH",
         body: JSON.stringify({ full_name: fullName, email }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Update failed");
+      console.log("Updated profile:", data);
       setProfile((prev) => (prev ? { ...prev, ...data } : prev));
       reloadUser();
       toast({ title: "Profile updated", variant: "success" });
@@ -287,6 +291,7 @@ export default function ProfilePage() {
               size="sm"
               variant="outline"
               leftIcon={<LogOut size={13} />}
+
               onClick={logout}
               className="shrink-0"
             >
@@ -301,7 +306,7 @@ export default function ProfilePage() {
       {/* ------------------------------------------------------------ */}
       <div className="grid grid-cols-1 gap-5 p-6 lg:grid-cols-2">
         <SectionCard icon={UserIcon} title="Basic info">
-          <Field label="Full name" htmlFor="full_name">
+          <Field label="Full name" htmlFor="full_name" required>
             <Input
               id="full_name"
               value={fullName}
@@ -311,10 +316,13 @@ export default function ProfilePage() {
           <Field
             label="Email"
             htmlFor="email"
+            required
             hint={
               !profile.has_password
                 ? "Set a password to edit your email directly — it's otherwise tied to your connected sign-in provider(s)."
-                : undefined
+                : signInMethods.includes("Google") || signInMethods.includes("LinkedIn")
+                  ? "Your email is tied to your connected sign-in provider(s)."
+                  : undefined
             }
           >
             <Input
@@ -323,8 +331,8 @@ export default function ProfilePage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={
-                !signInMethods.includes("Google") &&
-                !signInMethods.includes("LinkedIn")
+                signInMethods.includes("Google") ||
+                signInMethods.includes("LinkedIn")
               }
             />
           </Field>

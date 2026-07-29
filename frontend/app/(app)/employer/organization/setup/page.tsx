@@ -212,41 +212,6 @@ export default function OrgSetupPage() {
                 >
                   Join with code
                 </Button>
-
-                <div className="relative py-1">
-                  <div className="absolute inset-0 flex items-center">
-                    <div className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs">
-                    <span className="bg-background px-2 text-muted-foreground">
-                      Or use an org ID
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  <Field
-                    label="Organisation ID"
-                    htmlFor="org_id"
-                    hint="Fallback if you don't have a join code — ask the owner for their org ID."
-                  >
-                    <Input
-                      id="org_id"
-                      value={orgId}
-                      onChange={(e) => setOrgId(e.target.value)}
-                      placeholder="Paste the org UUID here"
-                      className="font-mono"
-                    />
-                  </Field>
-                  <Button
-                    className="w-full"
-                    variant="outline"
-                    loading={loading}
-                    onClick={handleRequestJoin}
-                  >
-                    Send join request by ID
-                  </Button>
-                </div>
               </div>
             )}
           </CardContent>
