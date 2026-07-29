@@ -267,3 +267,52 @@ body {
     0 8px 32px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
 }
+
+/* ── Premium Sidebar ──────────────────────────────────────────────── */
+
+/* Frosted-glass popup (profile context menu) */
+.glass-popup {
+  background: color-mix(in srgb, var(--popover) 72%, transparent);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
+  box-shadow:
+    0 12px 40px rgba(15, 23, 42, 0.12),
+    0 4px 12px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 color-mix(in srgb, white 18%, transparent);
+}
+[data-theme='dark'] .glass-popup {
+  box-shadow:
+    0 12px 40px rgba(0, 0, 0, 0.5),
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    inset 0 1px 0 color-mix(in srgb, white 6%, transparent);
+}
+
+/* Popup entrance: subtle scale + fade */
+@keyframes sidebar-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Active indicator line reveal */
+@keyframes sidebar-indicator-in {
+  from {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .animate-sidebar-menu { animation: sidebar-menu-in 180ms cubic-bezier(0.16, 1, 0.3, 1); }
+  .animate-sidebar-indicator { animation: sidebar-indicator-in 250ms cubic-bezier(0.16, 1, 0.3, 1); }
+}

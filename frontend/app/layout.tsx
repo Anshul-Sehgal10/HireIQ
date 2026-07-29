@@ -5,7 +5,6 @@ import { AuthProvider } from "@/context/auth";
 import { ThemeProvider } from "@/context/theme";
 import { ToastProvider } from "@/components/ui/Toast";
 
-// @ts-expect-error: Implicit any for side-effect CSS import
 import "./globals.css";
 
 const inter = Inter({
