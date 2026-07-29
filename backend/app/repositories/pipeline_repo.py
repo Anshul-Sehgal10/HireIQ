@@ -17,6 +17,8 @@ from app.db.models.pipeline import (
     PipelineChannel,
     PipelineStage,
 )
+from app.db.models.application import Application
+from app.db.models.candidate_profiles import CandidateProfile
 
 
 # ---------------------------------------------------------------------------
@@ -109,7 +111,9 @@ async def list_active_members(db: AsyncSession, channel_id: uuid.UUID) -> List[C
     result = await db.execute(
         select(ChannelMember)
         .options(
-            joinedload(ChannelMember.application),
+            joinedload(ChannelMember.application)
+            .joinedload(Application.candidate_profile)
+            .joinedload(CandidateProfile.user),
         )
         .where(
             ChannelMember.channel_id == channel_id,

@@ -10,6 +10,7 @@ import {
   Skeleton,
   SkeletonText,
 } from "@/components/ui";
+import { useRouter } from "next/navigation";
 
 interface JobDetail {
   id: string;
@@ -75,6 +76,7 @@ export default function JobDetailModal({
   onApplied,
   onWithdrawn,
 }: Props) {
+  const router = useRouter();
   const [detail, setDetail] = useState<JobDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -150,10 +152,21 @@ export default function JobDetailModal({
           data.detail?.message ?? data.detail ?? "Failed to apply",
         );
       }
+
+      const newStatus = data.status ?? "pending";
+
+      // Scenario-gated jobs: go straight into the timed test instead of
+      // dropping the candidate back on the feed, where they'd have to
+      // reopen this same job and click through again to start it.
+      if (newStatus === "scenario_pending") {
+        router.push(`/candidate/scenario/${data.id}`);
+        return;
+      }
+
       onApplied({
         id: data.id,
         job_id: jobId,
-        status: data.status ?? "pending",
+        status: newStatus,
       });
     } catch (e: any) {
       setApplyError(e.message);
@@ -308,6 +321,17 @@ export default function JobDetailModal({
                     </span>
                   </div>
                 )}
+
+              {detail.scenario_enabled && application.scenario_ai_summary && (
+                <div className="rounded-lg border border-border bg-muted/30 p-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Scenario feedback
+                  </p>
+                  <p className="text-sm text-foreground">
+                    {application.scenario_ai_summary}
+                  </p>
+                </div>
+              )}
 
               {application.is_override && (
                 <p className="text-xs text-warning">

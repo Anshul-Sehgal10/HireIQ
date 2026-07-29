@@ -11,10 +11,26 @@ import ResumeUpload from "@/components/ResumeUpload";
 import { PageHeader, Card, SkeletonCard, Button, Input } from "@/components/ui";
 
 const ALL_CATEGORIES = [
-  "backend", "frontend", "fullstack", "mobile", "devops_cloud", "data_ml",
-  "qa_testing", "security", "design_ux", "product_management",
-  "embedded_systems", "game_dev", "blockchain", "sales", "marketing",
-  "hr_recruiting", "finance", "operations", "customer_support", "other",
+  "backend",
+  "frontend",
+  "fullstack",
+  "mobile",
+  "devops_cloud",
+  "data_ml",
+  "qa_testing",
+  "security",
+  "design_ux",
+  "product_management",
+  "embedded_systems",
+  "game_dev",
+  "blockchain",
+  "sales",
+  "marketing",
+  "hr_recruiting",
+  "finance",
+  "operations",
+  "customer_support",
+  "other",
 ];
 
 interface Job {
@@ -70,7 +86,13 @@ interface Filters {
   salary_max: string;
 }
 
-const EMPTY_FILTERS: Filters = { q: "", categories: [], location: "", salary_min: "", salary_max: "" };
+const EMPTY_FILTERS: Filters = {
+  q: "",
+  categories: [],
+  location: "",
+  salary_min: "",
+  salary_max: "",
+};
 
 export default function CandidateJobsPage() {
   return (
@@ -80,7 +102,13 @@ export default function CandidateJobsPage() {
   );
 }
 
-function ActiveResumeSwitcher({ resumeVersions, onSwitched }: { resumeVersions: ResumeVersion[]; onSwitched: () => void }) {
+function ActiveResumeSwitcher({
+  resumeVersions,
+  onSwitched,
+}: {
+  resumeVersions: ResumeVersion[];
+  onSwitched: () => void;
+}) {
   const [switching, setSwitching] = useState(false);
   const current = resumeVersions.find((r) => r.is_current);
   if (resumeVersions.length <= 1) return null;
@@ -89,7 +117,9 @@ function ActiveResumeSwitcher({ resumeVersions, onSwitched }: { resumeVersions: 
     if (!id || id === current?.id) return;
     setSwitching(true);
     try {
-      const res = await apiFetch(`/resumes/${id}/set-current`, { method: "POST" });
+      const res = await apiFetch(`/resumes/${id}/set-current`, {
+        method: "POST",
+      });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.detail ?? "Failed to switch active resume");
@@ -113,10 +143,16 @@ function ActiveResumeSwitcher({ resumeVersions, onSwitched }: { resumeVersions: 
         className="rounded-lg border border-input bg-card px-2.5 py-1.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
       >
         {resumeVersions.map((rv) => (
-          <option key={rv.id} value={rv.id}>{rv.label ?? `Version ${rv.version_number}`}</option>
+          <option key={rv.id} value={rv.id}>
+            {rv.label ?? `Version ${rv.version_number}`}
+          </option>
         ))}
       </select>
-      {switching && <span className="text-xs animate-pulse text-muted-foreground">Switching…</span>}
+      {switching && (
+        <span className="text-xs animate-pulse text-muted-foreground">
+          Switching…
+        </span>
+      )}
     </div>
   );
 }
@@ -132,7 +168,11 @@ const SALARY_BANDS: { label: string; min?: number; max?: number }[] = [
 ];
 
 function FilterPanel({
-  filters, onChange, onReset, categoriesAreDefault, onClose,
+  filters,
+  onChange,
+  onReset,
+  categoriesAreDefault,
+  onClose,
 }: {
   filters: Filters;
   onChange: (f: Filters) => void;
@@ -149,19 +189,30 @@ function FilterPanel({
   const commitLocation = (val: string) => {
     setLocDraft(val);
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => onChange({ ...filters, location: val }), 400);
+    debounceRef.current = setTimeout(
+      () => onChange({ ...filters, location: val }),
+      400,
+    );
   };
 
   const activeBand =
     SALARY_BANDS.find(
-      (b) => (b.min?.toString() ?? "") === filters.salary_min && (b.max?.toString() ?? "") === filters.salary_max,
+      (b) =>
+        (b.min?.toString() ?? "") === filters.salary_min &&
+        (b.max?.toString() ?? "") === filters.salary_max,
     ) ?? SALARY_BANDS[0];
 
   const selectBand = (band: (typeof SALARY_BANDS)[number]) => {
-    onChange({ ...filters, salary_min: band.min?.toString() ?? "", salary_max: band.max?.toString() ?? "" });
+    onChange({
+      ...filters,
+      salary_min: band.min?.toString() ?? "",
+      salary_max: band.max?.toString() ?? "",
+    });
   };
 
-  const filteredCategories = ALL_CATEGORIES.filter((c) => c.toLowerCase().includes(catQuery.toLowerCase()));
+  const filteredCategories = ALL_CATEGORIES.filter((c) =>
+    c.toLowerCase().includes(catQuery.toLowerCase()),
+  );
 
   const toggleCategory = (cat: string) => {
     const next = filters.categories.includes(cat)
@@ -173,21 +224,35 @@ function FilterPanel({
   return (
     <Card className="mb-5 p-5">
       <div className="mb-5 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-foreground">Refine results</h3>
-        <button onClick={onClose} aria-label="Close filters" className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground">
+        <h3 className="text-sm font-semibold text-foreground">
+          Refine results
+        </h3>
+        <button
+          onClick={onClose}
+          aria-label="Close filters"
+          className="rounded-lg p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+        >
           <X size={15} />
         </button>
       </div>
 
       {/* Location */}
       <div className="mb-5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</p>
-        <Input placeholder="City or remote" value={locDraft} onChange={(e) => commitLocation(e.target.value)} />
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Location
+        </p>
+        <Input
+          placeholder="City or remote"
+          value={locDraft}
+          onChange={(e) => commitLocation(e.target.value)}
+        />
       </div>
 
       {/* Salary — scrollable selector */}
       <div className="mb-5">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Salary range</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Salary range
+        </p>
         <div className="scrollbar-none flex gap-2 overflow-x-auto pb-1">
           {SALARY_BANDS.map((band) => {
             const active = band.label === activeBand.label;
@@ -211,10 +276,15 @@ function FilterPanel({
       {/* Categories */}
       <div>
         <div className="mb-2 flex items-center justify-between gap-3">
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Categories</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Categories
+          </p>
           <div className="flex items-center gap-3">
             {!categoriesAreDefault && (
-              <button onClick={onReset} className="text-xs font-medium text-primary hover:text-primary-hover">
+              <button
+                onClick={onReset}
+                className="text-xs font-medium text-primary hover:text-primary-hover"
+              >
                 Reset to profile
               </button>
             )}
@@ -229,12 +299,19 @@ function FilterPanel({
           </div>
         </div>
 
-        <Input placeholder="Search categories…" value={catQuery} onChange={(e) => setCatQuery(e.target.value)} className="mb-2.5" />
+        <Input
+          placeholder="Search categories…"
+          value={catQuery}
+          onChange={(e) => setCatQuery(e.target.value)}
+          className="mb-2.5"
+        />
 
         <div className="max-h-36 overflow-y-auto rounded-lg border border-border bg-muted/30 p-2.5">
           <div className="flex flex-wrap gap-1.5">
             {filteredCategories.length === 0 && (
-              <p className="px-1 py-2 text-xs text-muted-foreground">No categories match &quot;{catQuery}&quot;</p>
+              <p className="px-1 py-2 text-xs text-muted-foreground">
+                No categories match &quot;{catQuery}&quot;
+              </p>
             )}
             {filteredCategories.map((cat) => (
               <button
@@ -260,7 +337,9 @@ function JobFeed() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [resumeVersions, setResumeVersions] = useState<ResumeVersion[]>([]);
-  const [feedStatus, setFeedStatus] = useState<"loading" | "resume_required" | "ok" | "error">("loading");
+  const [feedStatus, setFeedStatus] = useState<
+    "loading" | "resume_required" | "ok" | "error"
+  >("loading");
   const [error, setError] = useState<string | null>(null);
   const [detailJobId, setDetailJobId] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
@@ -330,11 +409,12 @@ function JobFeed() {
       }
       if (!jobsRes.ok) throw new Error("Failed to load jobs");
 
-      const [jobsData, appsData, resumesData]: [JobFeedResponse, any, any] = await Promise.all([
-        jobsRes.json(),
-        appsRes.ok ? appsRes.json() : [],
-        resumesRes.ok ? resumesRes.json() : [],
-      ]);
+      const [jobsData, appsData, resumesData]: [JobFeedResponse, any, any] =
+        await Promise.all([
+          jobsRes.json(),
+          appsRes.ok ? appsRes.json() : [],
+          resumesRes.ok ? resumesRes.json() : [],
+        ]);
 
       if (requestId !== requestIdRef.current) return;
 
@@ -356,12 +436,17 @@ function JobFeed() {
     const requestId = requestIdRef.current;
     setLoadingMore(true);
     try {
-      const res = await apiFetch(`/jobs/feed${buildQuery(filters, nextCursor)}`);
+      const res = await apiFetch(
+        `/jobs/feed${buildQuery(filters, nextCursor)}`,
+      );
       if (requestId !== requestIdRef.current) return;
       if (!res.ok) throw new Error("Failed to load more jobs");
       const data: JobFeedResponse = await res.json();
       if (requestId !== requestIdRef.current) return;
-      setJobs((prev) => [...prev, ...(Array.isArray(data.jobs) ? data.jobs : [])]);
+      setJobs((prev) => [
+        ...prev,
+        ...(Array.isArray(data.jobs) ? data.jobs : []),
+      ]);
       setNextCursor(data.next_cursor ?? null);
       setHasMore(Boolean(data.has_more));
     } catch {
@@ -402,7 +487,12 @@ function JobFeed() {
     if (feedStatus !== "ok" || !hasMore) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const observer = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) loadMore(); }, { rootMargin: "400px" });
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore();
+      },
+      { rootMargin: "400px" },
+    );
     observer.observe(el);
     return () => observer.disconnect();
   }, [feedStatus, hasMore, loadMore]);
@@ -412,30 +502,35 @@ function JobFeed() {
     searchDebounceRef.current = setTimeout(() => {
       setFilters((f) => (f.q === searchDraft ? f : { ...f, q: searchDraft }));
     }, 400);
-    return () => { if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current); };
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchDraft]);
 
-  const handleWithdraw = async (jobId: string) => {
-    const application = applications.find((a) => a.job_id === jobId && a.status !== "withdrawn");
+  // JobDetailModal already performs the withdraw API call itself before
+  // calling this — this only needs to sync local state. Calling the
+  // endpoint a second time here always failed with "already withdrawn"
+  // and left the feed showing stale status until a manual refresh.
+  const handleWithdrawn = (jobId: string) => {
+    const application = applications.find(
+      (a) => a.job_id === jobId && a.status !== "withdrawn",
+    );
     if (!application) return;
-    try {
-      const res = await apiFetch(`/applications/${application.id}/withdraw`, { method: "POST" });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.detail ?? "Failed to withdraw");
-      }
-      setApplications((prev) => prev.map((a) => (a.id === application.id ? { ...a, status: "withdrawn" } : a)));
-    } catch (e: any) {
-      setError(e.message);
-    }
+    setApplications((prev) =>
+      prev.map((a) =>
+        a.id === application.id ? { ...a, status: "withdrawn" } : a,
+      ),
+    );
   };
 
   if (feedStatus === "resume_required") {
     return (
       <div className="mx-auto max-w-lg p-8">
         <Card className="p-8">
-          <h1 className="mb-2 text-xl font-bold text-foreground">Upload your resume first</h1>
+          <h1 className="mb-2 text-xl font-bold text-foreground">
+            Upload your resume first
+          </h1>
           <p className="mb-6 text-sm text-muted-foreground">
             You need to upload a resume before you can browse and apply to jobs.
           </p>
@@ -445,10 +540,18 @@ function JobFeed() {
     );
   }
 
-  const appliedJobIds = new Map(applications.filter((a) => a.status !== "withdrawn").map((a) => [a.job_id, a.status]));
-  const categoriesAreDefault = JSON.stringify([...filters.categories].sort()) === JSON.stringify([...defaultCategories].sort());
+  const appliedJobIds = new Map(
+    applications
+      .filter((a) => a.status !== "withdrawn")
+      .map((a) => [a.job_id, a.status]),
+  );
+  const categoriesAreDefault =
+    JSON.stringify([...filters.categories].sort()) ===
+    JSON.stringify([...defaultCategories].sort());
   const activeFilterCount =
-    (filters.location ? 1 : 0) + (filters.salary_min ? 1 : 0) + (filters.salary_max ? 1 : 0) +
+    (filters.location ? 1 : 0) +
+    (filters.salary_min ? 1 : 0) +
+    (filters.salary_max ? 1 : 0) +
     (categoriesAreDefault ? 0 : filters.categories.length);
 
   return (
@@ -457,14 +560,20 @@ function JobFeed() {
         title="Job feed"
         description="Ranked by fit with your active resume"
         actions={
-          <Link href="/candidate/resumes" className="text-sm text-muted-foreground hover:text-foreground">
+          <Link
+            href="/candidate/resumes"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
             Manage resumes
           </Link>
         }
       />
 
       <div className="p-6">
-        <ActiveResumeSwitcher resumeVersions={resumeVersions} onSwitched={handleResumeSwitch} />
+        <ActiveResumeSwitcher
+          resumeVersions={resumeVersions}
+          onSwitched={handleResumeSwitch}
+        />
 
         <div className="mb-5 flex gap-3">
           <div className="relative flex-1">
@@ -475,7 +584,9 @@ function JobFeed() {
             />
           </div>
           <Button
-            variant={showFilters || activeFilterCount > 0 ? "primary" : "outline"}
+            variant={
+              showFilters || activeFilterCount > 0 ? "primary" : "outline"
+            }
             leftIcon={<SlidersHorizontal size={14} />}
             onClick={() => setShowFilters((v) => !v)}
           >
@@ -487,7 +598,9 @@ function JobFeed() {
           <FilterPanel
             filters={filters}
             onChange={setFilters}
-            onReset={() => setFilters((f) => ({ ...f, categories: defaultCategories }))}
+            onReset={() =>
+              setFilters((f) => ({ ...f, categories: defaultCategories }))
+            }
             categoriesAreDefault={categoriesAreDefault}
             onClose={() => setShowFilters(false)}
           />
@@ -501,13 +614,17 @@ function JobFeed() {
 
         {feedStatus === "loading" && (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+            {Array.from({ length: 6 }).map((_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </div>
         )}
 
         {feedStatus === "ok" && jobs.length === 0 && (
           <div className="py-16 text-center">
-            <p className="text-sm text-muted-foreground">No jobs match your filters.</p>
+            <p className="text-sm text-muted-foreground">
+              No jobs match your filters.
+            </p>
           </div>
         )}
 
@@ -525,11 +642,15 @@ function JobFeed() {
 
         {feedStatus === "ok" && hasMore && (
           <div ref={sentinelRef} className="py-8 text-center">
-            <p className="text-xs animate-pulse text-muted-foreground">{loadingMore ? "Loading more jobs…" : ""}</p>
+            <p className="text-xs animate-pulse text-muted-foreground">
+              {loadingMore ? "Loading more jobs…" : ""}
+            </p>
           </div>
         )}
         {feedStatus === "ok" && !hasMore && jobs.length > 0 && (
-          <p className="py-8 text-center text-xs text-muted-foreground">You've reached the end of the feed.</p>
+          <p className="py-8 text-center text-xs text-muted-foreground">
+            You've reached the end of the feed.
+          </p>
         )}
       </div>
 
@@ -537,14 +658,18 @@ function JobFeed() {
         <JobDetailModal
           jobId={detailJobId}
           resumeVersions={resumeVersions}
-          application={applications.find((a) => a.job_id === detailJobId && a.status !== "withdrawn") as any}
+          application={
+            applications.find(
+              (a) => a.job_id === detailJobId && a.status !== "withdrawn",
+            ) as any
+          }
           onClose={() => setDetailJobId(null)}
           onApplied={(application) => {
             setApplications((prev) => [...prev, application] as any);
             setDetailJobId(null);
           }}
           onWithdrawn={(jobId) => {
-            handleWithdraw(jobId);
+            handleWithdrawn(jobId);
             setDetailJobId(null);
           }}
         />
