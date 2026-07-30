@@ -16,35 +16,49 @@ export default function ThemeToggle({ className }: { className?: string }) {
   useEffect(() => setMounted(true), []);
 
   if (!mounted) {
-    return <div className={cn("h-8 w-8 rounded-lg", className)} aria-hidden="true" />;
+    return (
+      <div className={cn("h-8 w-8 rounded-lg", className)} aria-hidden="true" />
+    );
   }
 
   const isDark = resolvedTheme === "dark";
 
   const handleClick = () => {
     const next = isDark ? "light" : "dark";
-    const supportsViewTransition = typeof document !== "undefined" && "startViewTransition" in document;
+    const supportsViewTransition =
+      typeof document !== "undefined" && "startViewTransition" in document;
     const prefersReducedMotion =
-      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      typeof window !== "undefined" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (!supportsViewTransition || prefersReducedMotion || !buttonRef.current) {
       setTheme(next);
       return;
     }
-      const rect = buttonRef.current.getBoundingClientRect();
-      // getBoundingClientRect() is viewport-relative, but the view-transition
-      // pseudo-element's clip-path is relative to the initial containing block
-      // (i.e. page coordinates). Add scroll offset to compensate.
-      const x = rect.left + rect.width / 2 + window.scrollX;
-      const y = rect.top + rect.height / 2 + window.scrollY;
-      
-      const endRadius = Math.hypot(
-        Math.max(x, window.innerWidth - x),
-        Math.max(y, window.innerHeight - y),
-      );
-      
-      const root = document.documentElement;
-      root.style.setProperty("--reveal-x", `${x}px`);
+    const rect = buttonRef.current.getBoundingClientRect();
+    const rawX = rect.left + rect.width / 2 + window.scrollX;
+    const rawY = rect.top + rect.height / 2 + window.scrollY;
+
+    // Chromium bug: when the OS display scale isn't 100%, the
+    // ::view-transition-new(root) clip-path circle renders offset from
+    // where getBoundingClientRect() says the button actually is.
+    // devicePixelRatio tracks that scale factor (1.25 at 125%, etc.).
+    const scale = window.devicePixelRatio || 1;
+    const x = rawX * scale;
+    const y = rawY * scale;
+
+    // Radius must be derived from the SAME corrected x/y written below —
+    // computing it from the raw coordinates (as a previous pass did) means
+    // the circle's size no longer matches its own origin, so it falls
+    // short of the farthest corner. innerWidth/innerHeight are always CSS
+    // pixels regardless of display scale, so they pair correctly with x/y.
+    const endRadius = Math.hypot(
+      Math.max(x, window.innerWidth - x),
+      Math.max(y, window.innerHeight - y),
+    );
+
+    const root = document.documentElement;
+    root.style.setProperty("--reveal-x", `${x}px`);
     root.style.setProperty("--reveal-y", `${y}px`);
     root.style.setProperty("--reveal-r", `${endRadius}px`);
 
@@ -62,7 +76,7 @@ export default function ThemeToggle({ className }: { className?: string }) {
         setTheme(next);
       });
     });
-    
+
     transition.finished.finally(() => {
       root.style.removeProperty("--reveal-x");
       root.style.removeProperty("--reveal-y");
@@ -88,14 +102,18 @@ export default function ThemeToggle({ className }: { className?: string }) {
           size={16}
           className={cn(
             "absolute transition-all duration-300 ease-out",
-            isDark ? "rotate-0 scale-100 opacity-100" : "-rotate-90 scale-50 opacity-0",
+            isDark
+              ? "rotate-0 scale-100 opacity-100"
+              : "-rotate-90 scale-50 opacity-0",
           )}
         />
         <Moon
           size={16}
           className={cn(
             "absolute transition-all duration-300 ease-out",
-            isDark ? "rotate-90 scale-50 opacity-0" : "rotate-0 scale-100 opacity-100",
+            isDark
+              ? "rotate-90 scale-50 opacity-0"
+              : "rotate-0 scale-100 opacity-100",
           )}
         />
       </span>

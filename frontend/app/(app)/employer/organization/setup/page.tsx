@@ -2,9 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { Card, CardContent, Button, Field, Input } from "@/components/ui";
+import { Card, CardContent, Button, Field, Input, PageLoader } from "@/components/ui";
 
 export default function OrgSetupPage() {
   const router = useRouter();
@@ -106,11 +105,7 @@ export default function OrgSetupPage() {
   };
 
     if (checkingExisting) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="animate-pulse text-sm text-muted-foreground">Checking your account…</p>
-      </div>
-    );
+    return <PageLoader label="Checking your account…" />;
   }
 
   return (

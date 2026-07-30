@@ -18,6 +18,7 @@
 import { useAuth } from "@/context/auth";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { PageLoader } from "./ui";
 
 interface Props {
   allowed: string[];
@@ -36,9 +37,7 @@ export function RoleGuard({ allowed, children }: Props) {
   }, [user, loading, allowed, router]);
 
   if (loading || !user || !allowed.includes(user.role)) {
-    return <div className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500 animate-pulse">Checking access…</p>
-    </div>;
+    return <PageLoader label="Checking access…" />;
   }
 
   return <>{children}</>;

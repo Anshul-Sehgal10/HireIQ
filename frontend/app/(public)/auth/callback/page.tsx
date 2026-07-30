@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessTokenFromCookie } from "@/context/auth";
+import { PageLoader } from "@/components/ui";
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -46,12 +47,5 @@ export default function OAuthCallbackPage() {
     router.replace(`/${role ?? "candidate"}/dashboard`);
   }, [router]);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="flex flex-col items-center gap-3">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="text-sm text-muted-foreground">Completing sign in…</p>
-      </div>
-    </div>
-  );
+  return <PageLoader label="Completing sign in…" />;
 }

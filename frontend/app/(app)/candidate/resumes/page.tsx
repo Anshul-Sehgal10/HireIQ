@@ -41,7 +41,9 @@ function ResumesContent() {
       const res = await apiFetch("/resumes/");
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to load resumes");
+      data.sort((a: ResumeVersion, b: ResumeVersion) => a.version_number - b.version_number);
       setVersions(Array.isArray(data) ? data : []);
+      console.log("Loaded resumes:", data);
     } catch (e: any) {
       setError(e.message);
     } finally {
