@@ -1,24 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Send, Users, MessagesSquare, Layers } from "lucide-react";
+import { ArrowLeft, Users, MessagesSquare, Layers } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
+import { useAuth } from "@/context/auth";
 import { apiFetch } from "@/lib/api";
+import { useChatSocket, useTypingBroadcast, useTypingUsers } from "@/lib/useChatSocket";
 import {
   PageHeader,
   Card,
   CardContent,
   Button,
   Select,
-  Textarea,
   StatusBadge,
   MatchScoreRing,
   SkeletonText,
   useToast,
 } from "@/components/ui";
 import ExtractionDetailModal from "@/components/ExtractionDetailModal";
+import ChatBubble from "@/components/chat/ChatBubble";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import ChatComposer from "@/components/chat/ChatComposer";
 
 interface RankedCandidate {
   application_id: string;
@@ -65,6 +69,7 @@ export default function EmployerPipelinePage() {
 
 function Content() {
   const { jobId } = useParams<{ jobId: string }>();
+  const { user } = useAuth();
   const { toast } = useToast();
 
   const [jobTitle, setJobTitle] = useState("");
@@ -79,8 +84,9 @@ function Content() {
 
   const [msgType, setMsgType] = useState<"broadcast" | "direct">("broadcast");
   const [recipientId, setRecipientId] = useState("");
-  const [content, setContent] = useState("");
   const [sending, setSending] = useState(false);
+
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const [resumeModal, setResumeModal] = useState<{
     title: string;
@@ -89,6 +95,22 @@ function Content() {
     hasEmbedding: boolean;
   } | null>(null);
   const [resumeLoadingId, setResumeLoadingId] = useState<string | null>(null);
+
+  const { typingUsers, handleTyping } = useTypingUsers(user?.id);
+
+  const { connected, send } = useChatSocket<Message>(jobId ? `/ws/jobs/${jobId}/pipeline/chat` : null, {
+    onMessage: (data) => {
+      setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
+    },
+    // Ephemeral shortlist notice — toast only, never appended to `messages`
+    // (matches it not appearing in GET .../pipeline/messages either).
+    onActivity: (message) => {
+      toast({ title: message, variant: "info" });
+    },
+    onTyping: handleTyping,
+  });
+
+  const { notifyTyping, stopTyping } = useTypingBroadcast(send);
 
   const loadAll = async () => {
     setLoading(true);
@@ -104,11 +126,7 @@ function Content() {
       if (membersRes.ok) setMembers(await membersRes.json());
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      toast({
-        title: "Failed to load pipeline",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to load pipeline", description: e.message, variant: "error" });
     } finally {
       setLoading(false);
     }
@@ -119,13 +137,14 @@ function Content() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
   const shortlist = async (applicationId: string) => {
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(
-        `/jobs/${jobId}/pipeline/shortlist/${applicationId}`,
-        { method: "POST" },
-      );
+      const res = await apiFetch(`/jobs/${jobId}/pipeline/shortlist/${applicationId}`, { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to shortlist");
@@ -133,11 +152,7 @@ function Content() {
       toast({ title: "Candidate shortlisted", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      toast({
-        title: "Failed to shortlist",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to shortlist", description: e.message, variant: "error" });
     } finally {
       setBusyId(null);
     }
@@ -147,10 +162,7 @@ function Content() {
     if (!confirm("Reject this candidate?")) return;
     setBusyId(applicationId);
     try {
-      const res = await apiFetch(
-        `/jobs/${jobId}/pipeline/reject/${applicationId}`,
-        { method: "POST" },
-      );
+      const res = await apiFetch(`/jobs/${jobId}/pipeline/reject/${applicationId}`, { method: "POST" });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to reject");
@@ -158,11 +170,7 @@ function Content() {
       toast({ title: "Candidate rejected", variant: "success" });
       await loadAll();
     } catch (e: any) {
-      toast({
-        title: "Failed to reject",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to reject", description: e.message, variant: "error" });
     } finally {
       setBusyId(null);
     }
@@ -179,37 +187,32 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to advance stage");
       }
-      toast({
-        title: `Pipeline advanced to ${stage.replace(/_/g, " ")}`,
-        variant: "success",
-      });
+      toast({ title: `Pipeline advanced to ${stage.replace(/_/g, " ")}`, variant: "success" });
       await loadAll();
     } catch (e: any) {
-      toast({
-        title: "Failed to advance stage",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to advance stage", description: e.message, variant: "error" });
     } finally {
       setAdvancing(false);
     }
   };
 
-  const sendMessage = async () => {
-    if (!content.trim()) return;
+  const sendMessage = async (content: string) => {
     if (msgType === "direct" && !recipientId) {
-      toast({
-        title: "Select a recipient for a direct message",
-        variant: "error",
+      toast({ title: "Select a recipient for a direct message", variant: "error" });
+      return;
+    }
+    if (connected) {
+      send({
+        type: "message",
+        content,
+        message_type: msgType,
+        ...(msgType === "direct" ? { recipient_application_id: recipientId } : {}),
       });
       return;
     }
     setSending(true);
     try {
-      const body: Record<string, unknown> = {
-        message_type: msgType,
-        content: content.trim(),
-      };
+      const body: Record<string, unknown> = { message_type: msgType, content };
       if (msgType === "direct") body.recipient_application_id = recipientId;
       const res = await apiFetch(`/jobs/${jobId}/pipeline/messages`, {
         method: "POST",
@@ -219,15 +222,10 @@ function Content() {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.detail ?? "Failed to send message");
       }
-      setContent("");
       const messagesRes = await apiFetch(`/jobs/${jobId}/pipeline/messages`);
       if (messagesRes.ok) setMessages(await messagesRes.json());
     } catch (e: any) {
-      toast({
-        title: "Failed to send message",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to send message", description: e.message, variant: "error" });
     } finally {
       setSending(false);
     }
@@ -236,9 +234,7 @@ function Content() {
   const viewResume = async (c: RankedCandidate) => {
     setResumeLoadingId(c.application_id);
     try {
-      const res = await apiFetch(
-        `/applications/${c.application_id}/candidate-resume`,
-      );
+      const res = await apiFetch(`/applications/${c.application_id}/candidate-resume`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.detail ?? "Failed to load resume");
       setResumeModal({
@@ -248,25 +244,20 @@ function Content() {
         hasEmbedding: data.has_embedding,
       });
     } catch (e: any) {
-      toast({
-        title: "Failed to load resume",
-        description: e.message,
-        variant: "error",
-      });
+      toast({ title: "Failed to load resume", description: e.message, variant: "error" });
     } finally {
       setResumeLoadingId(null);
     }
   };
+
+  const typingNames = Object.values(typingUsers);
 
   return (
     <div className="mx-auto max-w-4xl">
       <PageHeader
         title={loading ? "Pipeline" : `Pipeline: ${jobTitle}`}
         actions={
-          <Link
-            href="/employer/jobs"
-            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-          >
+          <Link href="/employer/jobs" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground">
             <ArrowLeft size={14} />
             Back to job postings
           </Link>
@@ -279,17 +270,13 @@ function Content() {
           <CardContent className="p-0">
             <div className="mb-4 flex items-center gap-2">
               <Users size={15} className="text-primary" />
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Ranked candidates
-              </h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Ranked candidates</h2>
             </div>
 
             {loading ? (
               <SkeletonText lines={4} />
             ) : candidates.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No applications yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No applications yet.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -306,82 +293,33 @@ function Content() {
                   </thead>
                   <tbody>
                     {candidates.map((c) => (
-                      <tr
-                        key={c.application_id}
-                        className="border-b border-border last:border-0"
-                      >
+                      <tr key={c.application_id} className="border-b border-border last:border-0">
                         <td className="py-3 pr-4">
-                          <p className="font-medium text-foreground">
-                            {c.candidate_name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {c.candidate_email}
-                          </p>
+                          <p className="font-medium text-foreground">{c.candidate_name}</p>
+                          <p className="text-xs text-muted-foreground">{c.candidate_email}</p>
                         </td>
                         <td className="py-3 pr-4">
                           <StatusBadge status={c.status} />
                         </td>
                         <td className="py-3 pr-4">
-                          {c.match_score != null ? (
-                            <MatchScoreRing score={c.match_score} size="sm" />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
+                          {c.match_score != null ? <MatchScoreRing score={c.match_score} size="sm" /> : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="py-3 pr-4">
-                          {c.scenario_score != null ? (
-                            <MatchScoreRing
-                              score={c.scenario_score}
-                              size="sm"
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
+                          {c.scenario_score != null ? <MatchScoreRing score={c.scenario_score} size="sm" /> : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
                         <td className="py-3 pr-4">
-                          {c.composite_score != null ? (
-                            <MatchScoreRing
-                              score={c.composite_score}
-                              size="sm"
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
+                          {c.composite_score != null ? <MatchScoreRing score={c.composite_score} size="sm" /> : <span className="text-xs text-muted-foreground">—</span>}
                         </td>
-                        <td className="py-3 pr-4 text-xs text-muted-foreground">
-                          {c.in_pipeline ? "Yes" : "No"}
-                        </td>
+                        <td className="py-3 pr-4 text-xs text-muted-foreground">{c.in_pipeline ? "Yes" : "No"}</td>
                         <td className="py-3 pr-4">
                           <div className="flex flex-wrap gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              loading={resumeLoadingId === c.application_id}
-                              onClick={() => viewResume(c)}
-                            >
+                            <Button size="sm" variant="outline" loading={resumeLoadingId === c.application_id} onClick={() => viewResume(c)}>
                               Resume
                             </Button>
-                            <Button
-                              size="sm"
-                              loading={busyId === c.application_id}
-                              disabled={c.in_pipeline}
-                              onClick={() => shortlist(c.application_id)}
-                            >
+                            <Button size="sm" loading={busyId === c.application_id} disabled={c.in_pipeline} onClick={() => shortlist(c.application_id)}>
                               Shortlist
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              loading={busyId === c.application_id}
-                              disabled={c.status === "rejected"}
-                              onClick={() => reject(c.application_id)}
-                            >
+                            <Button size="sm" variant="destructive" loading={busyId === c.application_id} disabled={c.status === "rejected"} onClick={() => reject(c.application_id)}>
                               Reject
                             </Button>
                           </div>
@@ -400,16 +338,10 @@ function Content() {
           <CardContent className="p-0">
             <div className="mb-4 flex items-center gap-2">
               <Layers size={15} className="text-primary" />
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Pipeline stage
-              </h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Pipeline stage</h2>
             </div>
             <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
-              <Select
-                value={stage}
-                onChange={(e) => setStage(e.target.value)}
-                className="sm:w-56"
-              >
+              <Select value={stage} onChange={(e) => setStage(e.target.value)} className="sm:w-56">
                 {STAGES.map((s) => (
                   <option key={s} value={s}>
                     {s.replace(/_/g, " ")}
@@ -421,8 +353,7 @@ function Content() {
               </Button>
             </div>
             <p className="mt-2.5 text-xs text-muted-foreground">
-              Moves every active pipeline member's application status and posts
-              a system message. Rejected/withdrawn candidates are skipped.
+              Moves every active pipeline member's application status and posts a system message. Rejected/withdrawn candidates are skipped.
             </p>
           </CardContent>
         </Card>
@@ -430,13 +361,9 @@ function Content() {
         {/* Members */}
         <Card className="p-5">
           <CardContent className="p-0">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-              Active members ({members.length})
-            </h2>
+            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Active members ({members.length})</h2>
             {members.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No one has been shortlisted yet.
-              </p>
+              <p className="text-sm text-muted-foreground">No one has been shortlisted yet.</p>
             ) : (
               <ul className="space-y-2">
                 {members.map((m) => (
@@ -445,9 +372,7 @@ function Content() {
                       {m.candidate_name?.[0]?.toUpperCase() ?? "?"}
                     </span>
                     <span className="text-foreground">{m.candidate_name}</span>
-                    <span className="text-muted-foreground">
-                      ({m.candidate_email})
-                    </span>
+                    <span className="text-muted-foreground">({m.candidate_email})</span>
                   </li>
                 ))}
               </ul>
@@ -456,85 +381,75 @@ function Content() {
         </Card>
 
         {/* Messages */}
-        <Card className="p-5">
-          <CardContent className="p-0">
-            <div className="mb-4 flex items-center gap-2">
+        <Card className="flex flex-col overflow-hidden p-0">
+          <div className="flex items-center justify-between border-b border-border px-5 py-4">
+            <div className="flex items-center gap-2">
               <MessagesSquare size={15} className="text-primary" />
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Channel messages
-              </h2>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Channel messages</h2>
             </div>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-success" : "bg-warning"}`} />
+              {connected ? "Live" : "Reconnecting…"}
+            </span>
+          </div>
 
-            <div className="mb-4 max-h-72 space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3 scrollbar-none">
-              {messages.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No messages yet.
-                </p>
-              )}
-              {messages.map((m) => (
-                <div
-                  key={m.id}
-                  className={`rounded-lg px-3 py-2 text-sm ${
-                    m.message_type === "system"
-                      ? "bg-muted text-muted-foreground italic"
-                      : "bg-card text-foreground"
-                  }`}
-                >
-                  <div className="mb-0.5 flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
-                      {m.message_type}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(m.sent_at).toLocaleString()}
-                    </span>
-                  </div>
-                  {m.content}
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2.5">
-              <div className="flex flex-col gap-2 sm:flex-row">
-                <Select
-                  value={msgType}
-                  onChange={(e) =>
-                    setMsgType(e.target.value as "broadcast" | "direct")
-                  }
-                  className="sm:w-56"
-                >
-                  <option value="broadcast">Broadcast (all members)</option>
-                  <option value="direct">Direct</option>
-                </Select>
-                {msgType === "direct" && (
-                  <Select
-                    value={recipientId}
-                    onChange={(e) => setRecipientId(e.target.value)}
-                    className="flex-1"
-                  >
-                    <option value="">Select recipient…</option>
-                    {members.map((m) => (
-                      <option key={m.application_id} value={m.application_id}>
-                        {m.candidate_name}
-                      </option>
-                    ))}
-                  </Select>
-                )}
+          <div className="flex h-96 flex-col gap-3 overflow-y-auto scrollbar-none p-4">
+            {loading ? (
+              <SkeletonText lines={3} />
+            ) : messages.length === 0 ? (
+              <div className="flex h-full items-center justify-center">
+                <p className="text-sm text-muted-foreground">No messages yet.</p>
               </div>
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Message content…"
-                rows={2}
+            ) : (
+              messages.map((m) => {
+                const isOwn = m.sender_id != null && m.sender_id === user?.id;
+                const isSystem = m.message_type === "system";
+                return (
+                  <ChatBubble
+                    key={m.id}
+                    content={m.content}
+                    sentAt={m.sent_at}
+                    system={isSystem}
+                    align={isOwn ? "right" : "left"}
+                    senderLabel={isSystem || isOwn ? undefined : m.message_type === "direct" ? "Employer (direct)" : "Employer"}
+                    initials={isSystem ? undefined : "E"}
+                  />
+                );
+              })
+            )}
+            <div ref={bottomRef} />
+          </div>
+
+          <div className="border-t border-border p-4">
+            <TypingIndicator names={typingNames} />
+            <div className="mt-1.5">
+              <ChatComposer
+                onSend={sendMessage}
+                onTyping={notifyTyping}
+                onStopTyping={stopTyping}
+                sending={sending}
+                placeholder="Message the pipeline…"
+                leftSlot={
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Select value={msgType} onChange={(e) => setMsgType(e.target.value as "broadcast" | "direct")} className="sm:w-56">
+                      <option value="broadcast">Broadcast (all members)</option>
+                      <option value="direct">Direct</option>
+                    </Select>
+                    {msgType === "direct" && (
+                      <Select value={recipientId} onChange={(e) => setRecipientId(e.target.value)} className="flex-1">
+                        <option value="">Select recipient…</option>
+                        {members.map((m) => (
+                          <option key={m.application_id} value={m.application_id}>
+                            {m.candidate_name}
+                          </option>
+                        ))}
+                      </Select>
+                    )}
+                  </div>
+                }
               />
-              <Button
-                leftIcon={<Send size={13} />}
-                loading={sending}
-                onClick={sendMessage}
-              >
-                Send
-              </Button>
             </div>
-          </CardContent>
+          </div>
         </Card>
 
         {resumeModal && (

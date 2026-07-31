@@ -1,14 +1,16 @@
 """
 Pipeline service — business logic for shortlist/reject, stage advancement,
-and channel messaging. Sits between the routes (router/routes/pipeline.py)
-and the two repos it touches (pipeline_repo, application_repo).
+and channel messaging. Sits between the routes (router/routes/pipeline.py,
+router/routes/ws_pipeline.py) and the two repos it touches (pipeline_repo,
+application_repo).
 
 Design notes
 ------------
 - Every mutating action here also drops a SYSTEM message into the channel
   so the audit trail ("why did my status change") lives in the same place
   the candidate/employer already look — the channel — rather than a
-  separate audit table they'd never see.
+  separate audit table they'd never see. EXCEPTION: shortlisting a single
+  candidate no longer writes a persisted message — see shortlist_application.
 - Application status transitions driven by pipeline stage advancement are
   intentionally narrow: only forward pipeline stages (shortlisted →
   assessment → interview → offer) map onto ApplicationStatus values.
@@ -18,6 +20,10 @@ Design notes
 - Withdrawn/rejected applications are always skipped during bulk stage
   advancement — a candidate who withdrew mid-pipeline should never be
   silently resurrected by an unrelated "advance everyone" action.
+- Every function that mutates the channel also pushes the change live to
+  connected WebSockets (see ws_pipeline.py) so REST callers and WS callers
+  both result in real-time updates for everyone in the room — one code
+  path, not two.
 """
 
 import uuid
@@ -25,12 +31,14 @@ from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.ws_manager import ConnectionInfo, pipeline_chat_manager
 from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
 from app.db.models.job import JobPosting
 from app.db.models.pipeline import ChannelMessage, MessageType, PipelineChannel, PipelineStage
 from app.db.models.user import User
 from app.repositories import application_repo, pipeline_repo
+from app.schemas.pipeline import ChannelMessageResponse
 
 # Forward-stage mapping only. CLOSED is deliberately absent — see module
 # docstring. If PipelineStage ever grows a stage without a matching
@@ -65,6 +73,45 @@ async def _candidate_display_name(db: AsyncSession, application: Application) ->
     return u.full_name if u else "A candidate"
 
 
+def _room_id(channel_id: uuid.UUID) -> str:
+    return f"pipeline:{channel_id}"
+
+
+def _visible_to(info: ConnectionInfo, message: ChannelMessage) -> bool:
+    """
+    Employer/admin sockets see everything. Candidate sockets only see
+    BROADCAST/SYSTEM messages plus DIRECT messages addressed specifically
+    to their own application — mirrors pipeline_repo.list_messages_for_candidate.
+    """
+    if info.role in ("employer", "admin"):
+        return True
+    if message.message_type in (MessageType.BROADCAST, MessageType.SYSTEM):
+        return True
+    return (
+        message.recipient_application_id is not None
+        and str(message.recipient_application_id) == info.extra.get("application_id")
+    )
+
+
+async def _push_message(channel_id: uuid.UUID, message: ChannelMessage) -> None:
+    """Pushes a persisted message live to every connection allowed to see it."""
+    payload = ChannelMessageResponse.model_validate(message).model_dump(mode="json")
+    await pipeline_chat_manager.broadcast_selective(
+        _room_id(channel_id),
+        lambda info: {"type": "message", "data": payload} if _visible_to(info, message) else None,
+    )
+
+
+async def _push_activity(channel_id: uuid.UUID, text: str) -> None:
+    """
+    Ephemeral, non-persisted live notice — NOT stored in channel_messages
+    and NOT shown again after a page reload. Used for high-frequency,
+    low-signal events (see shortlist_application) that would otherwise
+    drown out real conversation if written as permanent SYSTEM messages.
+    """
+    await pipeline_chat_manager.broadcast(_room_id(channel_id), {"type": "activity", "message": text})
+
+
 # ---------------------------------------------------------------------------
 # Employer — shortlist / reject
 # ---------------------------------------------------------------------------
@@ -76,6 +123,13 @@ async def shortlist_application(
     Moves an application into the job's pipeline channel. Creates the
     channel on first shortlist for this job. Idempotent — shortlisting an
     already-active member just reaffirms membership rather than erroring.
+
+    Deliberately does NOT write a persisted SYSTEM chat message. Employers
+    often shortlist many candidates back-to-back in one session; a stored
+    channel message on every single one buried real conversation under
+    "X has been shortlisted" spam (reported in TODO.md). A live-only
+    "activity" toast is pushed instead — visible to whoever's watching
+    right now, gone on reload, never part of the message history.
     """
     if application.status == ApplicationStatus.WITHDRAWN:
         raise ValueError("Cannot shortlist a withdrawn application")
@@ -87,9 +141,7 @@ async def shortlist_application(
     )
 
     name = await _candidate_display_name(db, application)
-    await pipeline_repo.create_message(
-        db, channel.id, MessageType.SYSTEM, f"{name} has been shortlisted.",
-    )
+    await _push_activity(channel.id, f"{name} has been shortlisted.")
     return channel
 
 
@@ -118,9 +170,10 @@ async def reject_application(
         return  # was never a pipeline member — nothing more to do
 
     name = await _candidate_display_name(db, application)
-    await pipeline_repo.create_message(
+    message = await pipeline_repo.create_message(
         db, channel.id, MessageType.SYSTEM, f"{name} has been rejected and removed from the pipeline.",
     )
+    await _push_message(channel.id, message)
 
 
 # ---------------------------------------------------------------------------
@@ -154,10 +207,11 @@ async def advance_stage(
         if stage == PipelineStage.CLOSED:
             await pipeline_repo.deactivate_member(db, channel.id, member.application_id)
 
-    await pipeline_repo.create_message(
+    message = await pipeline_repo.create_message(
         db, channel.id, MessageType.SYSTEM,
         f"Pipeline stage advanced to {stage.value.replace('_', ' ')}.",
     )
+    await _push_message(channel.id, message)
     return await pipeline_repo.update_stage(db, channel, stage)
 
 
@@ -174,7 +228,8 @@ async def post_employer_message(
     recipient_application_id: Optional[uuid.UUID],
 ) -> ChannelMessage:
     """
-    Validates and creates an employer-authored message.
+    Validates and creates an employer-authored message, then pushes it
+    live to connected sockets (filtered per-recipient for DIRECT).
 
     - SYSTEM is server-only — an employer can never post one directly.
     - DIRECT requires a recipient who is a currently-active member of this
@@ -192,7 +247,7 @@ async def post_employer_message(
         if not member or not member.is_active:
             raise ValueError("Recipient is not an active member of this pipeline")
 
-    return await pipeline_repo.create_message(
+    message = await pipeline_repo.create_message(
         db,
         channel_id=channel.id,
         message_type=message_type,
@@ -200,3 +255,5 @@ async def post_employer_message(
         sender_id=sender_id,
         recipient_application_id=recipient_application_id if message_type == MessageType.DIRECT else None,
     )
+    await _push_message(channel.id, message)
+    return message

@@ -15,9 +15,11 @@ The Todos for the user, ai model ignore this section
 
 - [ ] when candidate use override after submitting scenario, it should bring him back to dashboard or say applied or used override, instead it says 0% Meets the bar for this role Needed 50% to pass automatically.
 - [ ] Change the color of sidebar collapse button, remove the theme option in collapsed sidebar, also when we hover to closed sidebar's open button, it opens the sidebar because of hover and we have to move again to pin the sidebar
-- [ ] Rejected label should be shown in red in job feeb
+- [ ] Make the sidebar job scenario checkbox in employer form a ticked by default
+- [ ] Rejected label should be shown in red in job feeb - should we even show the applied jobs in job feed?
 - [ ] Turn org chat into live socket chat, as we will need it later for jobchat as well
 - [ ] Restructure the file by feature not type ([reference](https://chatgpt.com/c/6a6705f4-59bc-83ee-be9c-9b95691bae4a))
+- [ ] Learn in depth about redis, pub/sub for live updates and task scheduler for time based taske like monthly overrirde resets
 
 ## Bugs
 
@@ -29,13 +31,21 @@ Backend agent fix these bugs, Frontend agents report backend bugs here:
 
 Frontend agent fix these bugs, Backend agents report frontend bugs here:
 
+Issue: Scenario override result shows stale data
+
+Component: frontend/app/(app)/candidate/scenario/[applicationId]/page.tsx
+Steps: Submit scenario below threshold → click "Use override" → confirmOverride() fires
+Expected: After a successful override, the user should see confirmation that their application moved forward, not the original below-threshold result screen.
+Actual: confirmOverride() calls the override endpoint (which correctly returns meets_threshold: true) but never uses that response — it just does router.push("/candidate/dashboard") on success. If a stale result state renders anywhere in between, it'll show the pre-override 0%/failed data.
+Suggested fix: Either update local result state with the override response before navigating, or trust the redirect is instant and confirm there's no flash of the old done stage — worth a quick manual test to isolate exactly where the stale render happens.
+Priority: Medium
+
 ## Features
 
 ### Backend
 
 Backend agent implement these features, Frontend agents report backend features here:
 
-- [ ] Make it so the candidate can't apply for job until scenario (if enabled) is completed.
 - [ ] Admin platform-analytics endpoint — needed to build out the real Admin
       Control Center per the PRD (org verification queue, token usage by org,
       platform-wide pipeline funnel, rejection rates). No aggregate admin
@@ -77,50 +87,52 @@ Frontend agent implement these features, Backend agents report frontend features
   reference for the request/response shapes while building the real UI.
   Feel free to ignore/replace entirely.
 
+- [in prog] Title: New WebSocket endpoints for team chat + pipeline chat — UI needed
+      Affected: /employer/team-chat, /employer/jobs/[jobId]/pipeline, /candidate/pipeline/[applicationId]
+      Priority: High
+
+New WS endpoints and protocol are documented in the TODO.md block above — please build the Teams-style UI (presence list, typing indicator, live message stream) against those.
+Important distinction to render correctly: the pipeline socket now emits two different frame types — "message" (persisted, shows in history) and "activity" (ephemeral shortlist notices, should render as a transient toast/banner, not a permanent chat bubble, and should not be added to whatever message array you keep in state for history purposes).
+Existing REST GET endpoints (/orgs/mine/messages/, /jobs/{job_id}/pipeline/messages, /applications/{application_id}/pipeline/messages) are unchanged — keep using those for initial load; sockets are additive for live updates.
+No candidate-side pipeline chat input needed — that socket is receive-only by design (matches existing REST, which never had a candidate POST route either).
+
 ## Any Note by the agent
 
 ### Note By Frontend Agent (if any)
 
-Backend change made this round (small, additive — flagging per project protocol even though the user explicitly authorized it):
-
-- `backend/app/db/models/job.py`: added a `role_summary` @property on `JobPosting` that reads `parsed_data.get("role_summary")` — returns None if extraction hasn't run. No column, migration, or business logic touched.
-- `backend/app/schemas/job.py`: added `role_summary: Optional[str] = None` to `JobResponse`. Every existing route returning `JobResponse`/`JobFeedResponse` now includes it automatically via `from_attributes` — no route code changed.
-- Reason: job feed cards were showing the full raw JD text; now show the LLM's short extracted summary instead, falling back client-side to a truncated description if `role_summary` is null (unprocessed job).
-- Backend agent: please sanity-check this doesn't conflict with anything you have in flight on `JobPosting`/`JobResponse`.
-
 ### Note By Backend Agent (if any)
 
-Phase 7 (Admin Moderation) implemented — all 6 items closed:
+**WebSocket chat infrastructure added** (team chat + pipeline chat), plus a behavior change to shortlisting:
 
-- `VerificationStatus.BLOCKED` added (needs `alembic upgrade head` — migration
-  file content given to user in chat, not auto-applied since I don't have
-  repo/DB access in this environment).
-- New endpoints, admin-only (`AdminUser` dependency):
-  - `GET  /admin/orgs` — paginated, filter by `verification_status` + `q`,
-    returns member_count/published_job_count/owner_email per org
-  - `POST /admin/orgs/{org_id}/verify|reject|block|unblock` — body: `{reason?: string}`
-  - `GET  /admin/users` — paginated, filter by `role`/`is_active`/`q`
-  - `POST /admin/users/{user_id}/block|unblock` — body: `{reason?: string}`
-- Blocking an org (or rejecting a previously-verified one) auto-closes all
-  its published jobs. Unblocking does NOT reopen them — deliberate
-  republish required (same pattern as other soft-state changes in the app).
-- `publish_job` now 403s unless `org.verification_status == VERIFIED`. This
-  also applies to the "Reopen" button on closed jobs — same endpoint.
-- Fixed the rejected-org dead end: an org owner (or any member) whose org
-  is `REJECTED` can now create/request a new org; their old membership is
-  silently removed first.
-- `AuditLog` (existed, unused) now gets a row on every moderation action.
+New WS endpoints (all under `/api/v1`, so e.g. `ws://localhost:8000/api/v1/ws/orgs/mine/chat`):
 
-**Frontend work needed to surface this (not done — visual/UI is frontend's
-lane per project split):**
+- `WS /ws/orgs/mine/chat` — team chat. Employer/admin only, resolves org from the caller automatically.
+- `WS /ws/jobs/{job_id}/pipeline/chat` — pipeline chat, employer side. Full read/write.
+- `WS /ws/applications/{application_id}/pipeline/chat` — pipeline chat, candidate side. **Read-only** (receives live pushes only — there's still no candidate POST for pipeline messages, matches the existing REST design).
 
-- Admin Dashboard: replace the "coming soon" TODO card with real org/user
-  tables backed by `GET /admin/orgs` and `GET /admin/users`, with
-  verify/reject/block/unblock action buttons calling the new POST endpoints.
-- Employer-facing: org page (`/employer/organization`) should show a clear
-  banner when `verification_status` is `pending`/`rejected`/`blocked`,
-  explaining what it means (especially that `publish` is now blocked
-  until verified, and that a rejected org owner can start a new org).
-- Job posting flow: `publish`/`reopen` can now fail with 403 + a specific
-  message if the org isn't verified — surface that error instead of a
-  generic failure toast.
+**Auth:** no separate WS login step needed — the browser sends the existing `access_token` cookie automatically on the WS handshake. Just `new WebSocket(url)` with the browser already logged in; no manual token attachment required for browser clients.
+
+**Protocol** — every frame is JSON with a `type` field:
+
+Org chat client → server: `{"type":"message","content":"..."}`, `{"type":"typing_start"}`, `{"type":"typing_stop"}`
+Org chat server → client: `{"type":"message","data":OrgMessageResponse}`, `{"type":"presence","online_users":[{user_id,user_name,role}]}`, `{"type":"typing",user_id,user_name,is_typing}`, `{"type":"error","detail"}`
+
+Pipeline chat (employer) client → server: `{"type":"message","content":"...","message_type":"broadcast"|"direct","recipient_application_id":"..."?}`, `{"type":"typing_start"}`, `{"type":"typing_stop"}`
+Pipeline chat server → client (both employer + candidate sockets): `{"type":"message","data":ChannelMessageResponse}`, `{"type":"activity","message":"..."}`, `{"type":"typing",...}` (employer socket only), `{"type":"error","detail"}`
+
+**Still use the existing REST GET endpoints for initial history on page load** (`GET /orgs/mine/messages/`, `GET /jobs/{job_id}/pipeline/messages`, `GET /applications/{application_id}/pipeline/messages`) — the sockets are for live updates only, not history. REST POST for org/pipeline messages still works too and now also pushes live to connected sockets (so it's safe to keep as a fallback for non-JS-heavy flows, but the WS `"message"` frame is the primary path going forward).
+
+**Behavior change — shortlist no longer posts a persisted chat message.** Per your request, shortlisting a candidate now pushes an ephemeral `{"type":"activity","message":"X has been shortlisted."}` WS event instead of writing a SYSTEM row to `channel_messages`. This means:
+
+- Live viewers see a "X has been shortlisted" toast/notice in real time.
+- It does NOT appear in the message history returned by `GET /jobs/{job_id}/pipeline/messages` — reload the page and it's gone, by design.
+- Reject and stage-advance still write real, persisted SYSTEM messages (those remain visible in history) — only the high-frequency single-shortlist case was silenced.
+
+**Frontend work needed (your lane):**
+
+1. Team chat UI — Teams-style: message list, composer, online-users list from `presence` frames, typing indicator strip from `typing` frames (debounce sending `typing_start`/`typing_stop` on keystroke, e.g. 2s idle → stop).
+2. Pipeline chat UI — same pattern but note the `activity` frame type needs a different, transient rendering (toast/banner, not a chat bubble) since it's not part of persisted history.
+3. Connect socket on mount, close on unmount; reconnect-with-backoff on drop recommended (no reconnection logic exists server-side — plain accept/reject per connection).
+4. Origin-based auth means this only works when the frontend is served from an origin matching `FRONTEND_URL`/`localhost:3000` — confirm your dev setup matches before testing (or ask backend to add another allowed origin).
+
+**Known limitation (flagged, not fixed):** in-memory connection manager is single-process — will need a Redis pub/sub layer (or similar) before this can run behind multiple backend workers/replicas. Deferred, tracked as future Phase 5 infra work.

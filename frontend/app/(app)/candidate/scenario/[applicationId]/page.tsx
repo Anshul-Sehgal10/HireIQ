@@ -135,17 +135,22 @@ function ScenarioContent() {
     }
   };
 
-  const confirmOverride = async () => {
+const confirmOverride = async () => {
     setOverriding(true);
     try {
       const res = await apiFetch(
         `/applications/${applicationId}/scenario/override`,
         { method: "POST" },
       );
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail ?? "Failed to apply override");
-      }
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to apply override");
+
+      // Sync local state with the corrected (meets_threshold: true,
+      // requires_override: false) response before navigating away — this
+      // is what backend flagged: without it, any render between the click
+      // and the route change would still show the pre-override result
+      // (e.g. the old 0%/failed panel), since `result` was never updated.
+      setResult(data);
       router.push("/candidate/dashboard");
     } catch (e: any) {
       setErrorMsg(e.message);

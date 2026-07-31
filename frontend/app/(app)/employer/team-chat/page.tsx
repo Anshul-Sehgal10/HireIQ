@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Users2 } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
+import { useAuth } from "@/context/auth";
 import { apiFetch } from "@/lib/api";
-import { PageHeader, Card, CardContent, Textarea, Button, SkeletonText, useToast } from "@/components/ui";
+import { useChatSocket, useTypingBroadcast, useTypingUsers, type OnlineUser } from "@/lib/useChatSocket";
+import { PageHeader, Card, SkeletonText } from "@/components/ui";
+import ChatBubble from "@/components/chat/ChatBubble";
+import TypingIndicator from "@/components/chat/TypingIndicator";
+import PresenceStrip from "@/components/chat/PresenceStrip";
+import ChatComposer from "@/components/chat/ChatComposer";
 
 interface OrgMessage {
   id: string;
@@ -12,6 +18,13 @@ interface OrgMessage {
   sender_name: string | null;
   content: string;
   sent_at: string;
+}
+
+function initialsFor(name: string) {
+  const parts = name.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? "";
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (first + last).toUpperCase() || "?";
 }
 
 export default function TeamChatPage() {
@@ -23,12 +36,24 @@ export default function TeamChatPage() {
 }
 
 function Content() {
-  const { toast } = useToast();
+  const { user } = useAuth();
   const [messages, setMessages] = useState<OrgMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const [content, setContent] = useState("");
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
   const [sending, setSending] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+
+  const { typingUsers, handleTyping } = useTypingUsers(user?.id);
+
+  const { connected, send } = useChatSocket<OrgMessage>("/ws/orgs/mine/chat", {
+    onMessage: (data) => {
+      setMessages((prev) => (prev.some((m) => m.id === data.id) ? prev : [...prev, data]));
+    },
+    onPresence: setOnlineUsers,
+    onTyping: handleTyping,
+  });
+
+  const { notifyTyping, stopTyping } = useTypingBroadcast(send);
 
   const load = async () => {
     setLoading(true);
@@ -40,70 +65,82 @@ function Content() {
     }
   };
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+  useEffect(() => {
+    load();
+  }, []);
 
-  const send = async () => {
-    if (!content.trim()) return;
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = async (content: string) => {
+    if (connected) {
+      send({ type: "message", content });
+      return;
+    }
+    // Socket down — fall back to REST, which still pushes live to any
+    // other connected sockets per the backend note.
     setSending(true);
     try {
       const res = await apiFetch("/orgs/mine/messages/", {
         method: "POST",
-        body: JSON.stringify({ content: content.trim() }),
+        body: JSON.stringify({ content }),
       });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d.detail ?? "Failed to send message");
-      }
-      setContent("");
-      await load();
-    } catch (e: any) {
-      toast({ title: "Failed to send", description: e.message, variant: "error" });
+      if (res.ok) await load();
     } finally {
       setSending(false);
     }
   };
 
+  const typingNames = Object.values(typingUsers);
+
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="Team chat" description="Internal chat for your organisation — not visible to candidates" />
+      <PageHeader
+        title="Team chat"
+        description="Internal chat for your organisation — not visible to candidates"
+        actions={<PresenceStrip users={onlineUsers} />}
+      />
 
-      <div className="space-y-4 p-6">
-        <Card className="p-4">
-          <CardContent className="p-0">
-            <div className="mb-4 max-h-[60vh] min-h-[200px] space-y-2 overflow-y-auto rounded-lg border border-border bg-muted/30 p-3 scrollbar-none">
-              {loading ? (
-                <SkeletonText lines={4} />
-              ) : messages.length === 0 ? (
+      <div className="p-6">
+        <Card className="flex h-[70vh] flex-col overflow-hidden p-0">
+          <div className="flex-1 space-y-3 overflow-y-auto scrollbar-none p-4">
+            {loading ? (
+              <SkeletonText lines={4} />
+            ) : messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center">
+                <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  <Users2 size={19} />
+                </div>
                 <p className="text-sm text-muted-foreground">No messages yet — say hello to your team.</p>
-              ) : (
-                messages.map((m) => (
-                  <div key={m.id} className="rounded-lg bg-card px-3 py-2 text-sm">
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="text-xs font-semibold text-foreground">{m.sender_name ?? "Unknown"}</span>
-                      <span className="text-[10px] text-muted-foreground">{new Date(m.sent_at).toLocaleString()}</span>
-                    </div>
-                    <p className="text-foreground">{m.content}</p>
-                  </div>
-                ))
-              )}
-              <div ref={bottomRef} />
-            </div>
+              </div>
+            ) : (
+              messages.map((m) => {
+                const isOwn = m.sender_id === user?.id;
+                return (
+                  <ChatBubble
+                    key={m.id}
+                    content={m.content}
+                    sentAt={m.sent_at}
+                    senderLabel={isOwn ? undefined : m.sender_name ?? "Unknown"}
+                    initials={initialsFor(m.sender_name ?? "?")}
+                    align={isOwn ? "right" : "left"}
+                  />
+                );
+              })
+            )}
+            <div ref={bottomRef} />
+          </div>
 
-            <div className="flex gap-2">
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Message your team…"
-                rows={2}
-                className="flex-1"
-              />
-              <Button leftIcon={<Send size={13} />} loading={sending} onClick={send}>
-                Send
-              </Button>
+          <div className="border-t border-border p-3">
+            <TypingIndicator names={typingNames} />
+            <div className="mt-1">
+              <ChatComposer onSend={sendMessage} onTyping={notifyTyping} onStopTyping={stopTyping} sending={sending} placeholder="Message your team…" />
             </div>
-          </CardContent>
+          </div>
         </Card>
+
+        {!connected && <p className="mt-2 text-center text-xs text-muted-foreground">Reconnecting…</p>}
       </div>
     </div>
   );
