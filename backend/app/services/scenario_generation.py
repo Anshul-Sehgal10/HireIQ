@@ -11,6 +11,7 @@ specifically because this is a genuine multi-step, conditionally-looping
 flow — a plain prompt chain would need to hand-roll the same branching logic.
 """
 
+import asyncio
 from typing import Optional, TypedDict
 
 from langgraph.graph import StateGraph, END
@@ -257,3 +258,21 @@ async def generate_scenario_question(job: JobPosting) -> Optional[tuple[str, int
         return None
 
     return result["final_question"], result["final_time_limit"]
+
+
+async def generate_scenario_question_pool(
+    job: JobPosting, count: int = 3
+) -> list[tuple[str, int]]:
+    """
+    Runs `count` independent generate->critique->revise pipelines concurrently.
+    Used at scenario start to pre-generate a full pool: the first result
+    becomes the active question, the rest are held in reserve for
+    tab-switch/paste violations later in the attempt (see scenario.py).
+    Returns fewer than `count` entries if some generations fail — callers
+    must handle a short (or empty) pool gracefully.
+    """
+    results = await asyncio.gather(
+        *(generate_scenario_question(job) for _ in range(count)),
+        return_exceptions=False,
+    )
+    return [r for r in results if r is not None]

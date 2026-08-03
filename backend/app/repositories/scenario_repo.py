@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.scenario import ScenarioQuestion, ScenarioResponse
 
-
 # ---------------------------------------------------------------------------
 # scenario_questions
 # ---------------------------------------------------------------------------
@@ -88,6 +87,7 @@ async def get_response_for_application(
     )
     return result.scalar_one_or_none()
 
+
 async def delete_attempt_for_application(db: AsyncSession, application_id: uuid.UUID) -> None:
     """Removes any prior question/response for this application, so a
     withdraw-then-reapply gets a genuinely fresh attempt rather than being
@@ -100,3 +100,49 @@ async def delete_attempt_for_application(db: AsyncSession, application_id: uuid.
     if question:
         await db.delete(question)
         await db.commit()
+
+
+async def create_scenario_question_with_pool(
+    db: AsyncSession,
+    application_id: uuid.UUID,
+    question_text: str,
+    time_limit_seconds: int,
+    pool: list[dict],
+) -> ScenarioQuestion:
+    question = ScenarioQuestion(
+        application_id=application_id,
+        question_text=question_text,
+        time_limit_seconds=time_limit_seconds,
+        question_pool=pool,
+    )
+    db.add(question)
+    try:
+        await db.commit()
+        await db.refresh(question)
+        return question
+    except IntegrityError:
+        await db.rollback()
+        existing = await get_question_for_application(db, application_id)
+        if existing:
+            return existing
+        raise
+
+
+async def swap_question(
+    db: AsyncSession, question: ScenarioQuestion, next_question_text: str
+) -> ScenarioQuestion:
+    """Promotes the next pool entry to active and pops it off the pool."""
+    question.question_text = next_question_text
+    question.violation_count += 1
+    await db.commit()
+    await db.refresh(question)
+    return question
+
+
+async def register_violation_without_swap(
+    db: AsyncSession, question: ScenarioQuestion
+) -> ScenarioQuestion:
+    question.violation_count += 1
+    await db.commit()
+    await db.refresh(question)
+    return question

@@ -22,7 +22,7 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, UUIDMixin
@@ -70,6 +70,15 @@ class ScenarioQuestion(UUIDMixin, Base):
     )
     generated_at: Mapped[object] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # Backup questions generated alongside the active one at start time.
+    # Each swap (tab-switch/paste violation) pops one off and promotes it
+    # to question_text — see report_violation in scenario.py. Never
+    # regenerated mid-attempt: all 3 are locked in at scenario start so a
+    # candidate can't game timing by causing regeneration.
+    question_pool: Mapped[Optional[list[dict]]] = mapped_column(JSONB, nullable=True)
+    violation_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
     )
 
     # Relationships

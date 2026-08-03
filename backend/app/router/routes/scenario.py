@@ -10,28 +10,40 @@ Candidate-facing:
                                                           question for this attempt
   GET  /applications/{application_id}/scenario         → poll current question + time left
   POST /applications/{application_id}/scenario/submit  → submit answer, get scored
+  POST /applications/{application_id}/scenario/override → candidate chooses to override
+  POST /applications/{application_id}/scenario/violation → candidate reports tab-switch/paste
+                                                            (swaps in a fresh question from the
+                                                            pre-generated pool, or rejects if
+                                                            pool exhausted)
 """
 
-from datetime import datetime, timezone
-from typing import Annotated
 from uuid import UUID
+from typing import Annotated
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
+from app.core.logging import logger
 from app.core.dependencies import CandidateUser, EmployerUser, get_db
+
 from app.db.models.application import Application, ApplicationStatus
 from app.db.models.candidate_profiles import CandidateProfile
+
 from app.repositories import scenario_repo, application_repo, job_repo
 from app.repositories.org_repo import get_org_for_user
 from app.repositories.resume_repo import increment_override_usage
-from sqlalchemy import select
+
 from app.schemas.scenario import (
     ScenarioPreviewResponse,
     ScenarioQuestionResponse,
     ScenarioResultResponse,
     ScenarioSubmitRequest,
+    ScenarioViolationRequest,
+    ScenarioViolationResponse,
 )
+
 from app.services.scenario_generation import generate_scenario_question
 from app.services.scenario_evaluation import evaluate_scenario_response
 from app.services.override_quota import ensure_override_quota_current, is_unlimited
@@ -133,12 +145,10 @@ async def start_scenario(
         raise HTTPException(400, "You've already submitted this scenario question")
     if application.status != ApplicationStatus.SCENARIO_PENDING:
         raise HTTPException(400, "This application does not have a pending scenario test")
-    
+
     if await scenario_repo.get_response_for_application(db, application_id):
         raise HTTPException(400, "You've already submitted a response for this scenario")
-    
-    # Idempotent — page refresh / re-navigation should resume the same
-    # question and clock rather than generating a new one.
+
     existing = await scenario_repo.get_question_for_application(db, application_id)
     if existing:
         return _to_question_response(existing)
@@ -147,16 +157,20 @@ async def start_scenario(
     if not job:
         raise HTTPException(404, "Job not found")
 
-    result = await generate_scenario_question(job)
-    if result is None:
+    from app.services.scenario_generation import generate_scenario_question_pool
+    pool_results = await generate_scenario_question_pool(job, count=3)
+    if not pool_results:
         raise HTTPException(
             422,
             "Scenario question generation failed — check the LLM service "
             "configuration and try again.",
         )
-    question_text, time_limit_seconds = result
-    question = await scenario_repo.create_scenario_question(
-        db, application_id, question_text, time_limit_seconds
+
+    (active_text, active_limit), *backups = pool_results
+    pool = [{"question_text": t, "time_limit_seconds": tl} for t, tl in backups]
+
+    question = await scenario_repo.create_scenario_question_with_pool(
+        db, application_id, active_text, active_limit, pool
     )
     return _to_question_response(question)
 
@@ -210,6 +224,7 @@ async def submit_scenario(
     )
     evaluation = await evaluate_scenario_response(job, question.question_text, body.response_text)
     score = evaluation.score if evaluation else None
+    ai_summary = evaluation.summary if evaluation else None   
 
     scenario_response = await scenario_repo.create_scenario_response(
         db,
@@ -217,7 +232,7 @@ async def submit_scenario(
         question_id=question.id,
         response_text=body.response_text,
         score=score,
-        ai_summary= None,
+        ai_summary=ai_summary,
         paste_detected=body.paste_detected,
         tab_switches=body.tab_switches,
         time_taken_seconds=time_taken_seconds,
@@ -241,7 +256,7 @@ async def submit_scenario(
         id=scenario_response.id,
         application_id=scenario_response.application_id,
         score=scenario_response.score,
-        ai_summary=scenario_response.ai_summary,
+        ai_summary=None, # never surface to candidate, matches override_scenario's pattern
         time_taken_seconds=scenario_response.time_taken_seconds,
         paste_detected=scenario_response.paste_detected,
         tab_switches=scenario_response.tab_switches,
@@ -304,4 +319,74 @@ async def override_scenario(
         requires_override=False,
         overrides_remaining=max(0, profile.override_apps_limit - profile.override_apps_used),
         overrides_unlimited=is_unlimited(profile.override_apps_limit),
+    )
+
+
+#-----------------------------------------------------------------------------
+# Violation endpoints (tab-switch/paste) — candidate-facing
+#-----------------------------------------------------------------------------
+
+@candidate_router.post("/{application_id}/scenario/violation", response_model=ScenarioViolationResponse)
+async def report_violation(
+    application_id: UUID,
+    body: ScenarioViolationRequest,
+    user: CandidateUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """
+    Called when the candidate switches tabs/loses focus or pastes into the
+    answer field. Does NOT punish directly — swaps in a fresh question from
+    the pre-generated pool instead, so the time already spent "cheating"
+    is wasted rather than useful. Only once the pool is exhausted (2 prior
+    swaps) does a further violation reject the application outright.
+    """
+    application = await _get_owned_application(db, application_id, user)
+    if application.status != ApplicationStatus.SCENARIO_PENDING:
+        raise HTTPException(400, "No active scenario test for this application")
+
+    question = await scenario_repo.get_question_for_application(db, application_id)
+    if not question:
+        raise HTTPException(400, "Scenario has not been started")
+    if await scenario_repo.get_response_for_application(db, application_id):
+        raise HTTPException(400, "You've already submitted a response for this scenario")
+
+    elapsed = (datetime.now(timezone.utc) - question.started_at).total_seconds()  # type: ignore
+    remaining = max(0, int(question.time_limit_seconds - elapsed))
+
+    logger.info(
+        f"Scenario violation ({body.reason}) on application {application_id}, "
+        f"violation #{question.violation_count + 1}"
+    )
+
+    if remaining <= 0:
+        # Clock's already run out — let the normal client-side timeout/submit
+        # path handle it, no need to swap or reject through this endpoint.
+        return ScenarioViolationResponse(
+            violation_count=question.violation_count,
+            rejected=False,
+            new_question_text=None,
+            time_remaining_seconds=0,
+        )
+
+    pool = list(question.question_pool or [])
+    if pool:
+        next_entry = pool.pop(0)
+        question.question_pool = pool
+        question = await scenario_repo.swap_question(db, question, next_entry["question_text"])
+        return ScenarioViolationResponse(
+            violation_count=question.violation_count,
+            rejected=False,
+            new_question_text=question.question_text,
+            time_remaining_seconds=remaining,
+        )
+
+    # Pool exhausted — this is at least the 3rd violation. No more free swaps.
+    await scenario_repo.register_violation_without_swap(db, question)
+    application.status = ApplicationStatus.REJECTED
+    await db.commit()
+    return ScenarioViolationResponse(
+        violation_count=question.violation_count,
+        rejected=True,
+        new_question_text=None,
+        time_remaining_seconds=remaining,
     )

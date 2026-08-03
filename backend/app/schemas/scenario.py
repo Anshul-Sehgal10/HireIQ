@@ -41,3 +41,14 @@ class ScenarioPreviewResponse(BaseModel):
     without creating a row (there's no application to attach it to)."""
     question_text: str
     suggested_time_limit_seconds: int
+
+
+class ScenarioViolationRequest(BaseModel):
+    reason: str = Field(pattern="^(tab_switch|paste)$")
+
+
+class ScenarioViolationResponse(BaseModel):
+    violation_count: int
+    rejected: bool
+    new_question_text: Optional[str] = None
+    time_remaining_seconds: int

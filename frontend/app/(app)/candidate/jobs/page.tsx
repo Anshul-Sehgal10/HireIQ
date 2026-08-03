@@ -417,7 +417,6 @@ function JobFeed() {
         ]);
 
       if (requestId !== requestIdRef.current) return;
-      console.log("Loaded jobs:", jobsData);
       setJobs(Array.isArray(jobsData?.jobs) ? jobsData.jobs : []);
       setNextCursor(jobsData?.next_cursor ?? null);
       setHasMore(Boolean(jobsData?.has_more));

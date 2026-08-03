@@ -163,7 +163,8 @@ function DashboardContent() {
     interview: 2,
     offer: 1,
 
-    withdrawn: 5,
+    scenario_submitted: 5,
+    withdrawn: 6,
     rejected: 999,
   };
   const sortedApplications = [...applications].sort((a, b) => {
