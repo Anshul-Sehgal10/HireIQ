@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field
 
 
@@ -23,3 +23,25 @@ class ScenarioCritique(BaseModel):
         default=None,
         description="If passes=False, concrete feedback on what to fix in the next draft.",
     )
+
+
+class ScenarioBatchDraft(BaseModel):
+    """LLM output for generating all 3 pool questions in a single call."""
+    questions: List[str] = Field(
+        min_length=3, max_length=3,
+        description="Exactly 3 distinct scenario questions for this role.",
+    )
+    suggested_time_limit_seconds: int = Field(
+        ge=120, le=300,
+        description="One shared time limit appropriate for all 3 questions.",
+    )
+
+
+class ScenarioSingleDraft(BaseModel):
+    """LLM output when repairing a single question that failed critique."""
+    question_text: str
+
+
+class ScenarioBatchCritique(BaseModel):
+    """Per-question pass/fail + feedback, same order as the input batch."""
+    results: List[ScenarioCritique] = Field(min_length=3, max_length=3)

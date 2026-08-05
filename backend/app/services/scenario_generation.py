@@ -12,16 +12,21 @@ flow — a plain prompt chain would need to hand-roll the same branching logic.
 """
 
 import asyncio
-from typing import Optional, TypedDict
+from typing import Optional, TypedDict, List
 
-from langgraph.graph import StateGraph, END
 from google import genai
 from google.genai import types
+from langgraph.graph import StateGraph, END
 
 from app.core.config import settings
 from app.core.logging import logger
+
 from app.db.models.job import JobPosting
-from app.schemas.scenario_generation import ScenarioCritique, ScenarioDraft
+
+from app.schemas.scenario_generation import (
+    ScenarioBatchCritique, ScenarioBatchDraft, ScenarioCritique,
+    ScenarioDraft, ScenarioSingleDraft,
+)
 
 MAX_REVISION_ATTEMPTS = 2  # generate + up to 2 revisions before forcing acceptance
 
@@ -260,19 +265,249 @@ async def generate_scenario_question(job: JobPosting) -> Optional[tuple[str, int
     return result["final_question"], result["final_time_limit"]
 
 
-async def generate_scenario_question_pool(
-    job: JobPosting, count: int = 3
-) -> list[tuple[str, int]]:
-    """
-    Runs `count` independent generate->critique->revise pipelines concurrently.
-    Used at scenario start to pre-generate a full pool: the first result
-    becomes the active question, the rest are held in reserve for
-    tab-switch/paste violations later in the attempt (see scenario.py).
-    Returns fewer than `count` entries if some generations fail — callers
-    must handle a short (or empty) pool gracefully.
-    """
-    results = await asyncio.gather(
-        *(generate_scenario_question(job) for _ in range(count)),
-        return_exceptions=False,
+MAX_BATCH_REPAIR_ROUNDS = 1  # one bounded repair pass for failing questions, then accept as-is
+
+
+# ---------------------------------------------------------------------------
+# Batch pool generation — single call for all 3 questions + shared time limit
+# ---------------------------------------------------------------------------
+
+GENERATE_BATCH_PROMPT = """\
+You are writing THREE independent scenario-based interview questions for a
+candidate applying to this role. Each question should describe a distinct,
+realistic, role-specific situation and ask how the candidate would approach
+it — not a generic behavioral question like "tell me about a time you faced
+a challenge."
+
+Role context:
+---
+{job_context}
+---
+Seniority level: {job_level}
+
+Requirements:
+- Generate exactly 3 questions, each testing a different angle of the role
+  (different systems, different types of problems) so they don't feel like
+  variations of the same question.
+- All 3 should be roughly equal in difficulty and answerable in writing
+  within the same time limit.
+- Each must be specific enough that a generic, rehearsed answer would not
+  fully address it.
+- Suggest ONE shared time limit (120-300 seconds) appropriate for all 3.
+- Plain text only — no markdown, no HTML.
+- Match difficulty to the seniority level.
+"""
+
+CRITIQUE_BATCH_PROMPT = """\
+You are reviewing a batch of 3 scenario interview questions before they're
+shown to candidates as a rotating pool (a candidate sees one at a time, but
+all 3 must independently meet the bar). Be strict.
+
+Role context:
+---
+{job_context}
+---
+Seniority level: {job_level}
+
+Time limit for each: {time_limit} seconds
+
+Questions:
+1. {q1}
+2. {q2}
+3. {q3}
+
+For EACH question, check:
+1. Is it specific to this role (not generic boilerplate)?
+2. Is it realistically answerable, in writing, within the time limit?
+3. Does it avoid yes/no or trivia-style framing?
+4. Is the difficulty appropriate for the seniority level?
+
+Return one pass/fail + feedback result per question, in the same order.
+"""
+
+REPAIR_PROMPT = """\
+You are rewriting ONE scenario interview question that was rejected during
+review. Keep the same role context and target difficulty; produce a
+replacement that fixes the issue below.
+
+Role context:
+---
+{job_context}
+---
+Seniority level: {job_level}
+
+Rejected question:
+---
+{question}
+---
+Reviewer feedback (fix this): {feedback}
+
+Time limit: {time_limit} seconds
+
+Write ONE replacement question only. Plain text, no markdown.
+"""
+
+
+class ScenarioPoolGenState(TypedDict):
+    job_context: str
+    job_level: Optional[str]
+    questions: list[str]
+    time_limit: int
+    feedback: list[Optional[str]]   # per-index feedback; None = passed
+    round: int
+    final_questions: Optional[list[str]]
+    final_time_limit: int
+
+
+async def _generate_batch_node(state: ScenarioPoolGenState) -> ScenarioPoolGenState:
+    client = _get_client()
+    response = await client.aio.models.generate_content(
+        model=settings.GEMINI_EXTRACTION_MODEL,
+        contents=GENERATE_BATCH_PROMPT.format(
+            job_context=state["job_context"],
+            job_level=state["job_level"] or "unspecified",
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ScenarioBatchDraft,
+            temperature=0.7,
+        ),
     )
-    return [r for r in results if r is not None]
+    if response.parsed is None:
+        raise ValueError("Scenario batch generation returned unparseable output")
+
+    draft: ScenarioBatchDraft = response.parsed  # type: ignore[assignment]
+    return {
+        **state,
+        "questions": list(draft.questions),
+        "time_limit": draft.suggested_time_limit_seconds,
+    }
+
+
+async def _critique_batch_node(state: ScenarioPoolGenState) -> ScenarioPoolGenState:
+    client = _get_client()
+    q1, q2, q3 = state["questions"]
+    response = await client.aio.models.generate_content(
+        model=settings.GEMINI_EXTRACTION_MODEL,
+        contents=CRITIQUE_BATCH_PROMPT.format(
+            job_context=state["job_context"],
+            job_level=state["job_level"] or "unspecified",
+            time_limit=state["time_limit"],
+            q1=q1, q2=q2, q3=q3,
+        ),
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=ScenarioBatchCritique,
+            temperature=0.1,
+        ),
+    )
+    if response.parsed is None:
+        # Fail open, same policy as the single-question pipeline.
+        logger.warning("Scenario batch critique returned unparseable output — accepting batch as-is")
+        return {**state, "feedback": [None, None, None]}
+
+    critique: ScenarioBatchCritique = response.parsed  # type: ignore[assignment]
+    feedback = [r.feedback if not r.passes else None for r in critique.results]
+    return {**state, "feedback": feedback}
+
+
+async def _repair_single(
+    job_context: str, job_level: Optional[str], question: str, feedback: Optional[str], time_limit: int
+) -> Optional[str]:
+    client = _get_client()
+    try:
+        response = await client.aio.models.generate_content(
+            model=settings.GEMINI_EXTRACTION_MODEL,
+            contents=REPAIR_PROMPT.format(
+                job_context=job_context,
+                job_level=job_level or "unspecified",
+                question=question,
+                feedback=feedback or "unspecified issue",
+                time_limit=time_limit,
+            ),
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=ScenarioSingleDraft,
+                temperature=0.7,
+            ),
+        )
+        return response.parsed.question_text if response.parsed else None  # type: ignore
+    except Exception as exc:
+        logger.warning(f"Scenario question repair failed: {exc}")
+        return None
+
+
+async def _repair_node(state: ScenarioPoolGenState) -> ScenarioPoolGenState:
+    """Regenerates only the questions that failed critique, concurrently."""
+    indices = [i for i, fb in enumerate(state["feedback"]) if fb is not None]
+    repaired = await asyncio.gather(*(
+        _repair_single(state["job_context"], state["job_level"], state["questions"][i], state["feedback"][i], state["time_limit"])
+        for i in indices
+    ))
+    new_questions = list(state["questions"])
+    for idx, new_q in zip(indices, repaired):
+        if new_q:  # keep the original if repair itself failed — fail open
+            new_questions[idx] = new_q
+    return {**state, "questions": new_questions, "round": state["round"] + 1, "feedback": [None, None, None]}
+
+
+def _route_after_batch_critique(state: ScenarioPoolGenState) -> str:
+    if all(fb is None for fb in state["feedback"]):
+        return "finalize"
+    if state["round"] >= MAX_BATCH_REPAIR_ROUNDS:
+        logger.info("Scenario pool generation hit max repair rounds — accepting remaining questions as-is")
+        return "finalize"
+    return "repair"
+
+
+def _finalize_pool_node(state: ScenarioPoolGenState) -> ScenarioPoolGenState:
+    return {**state, "final_questions": state["questions"], "final_time_limit": state["time_limit"]}
+
+
+_pool_graph = StateGraph(ScenarioPoolGenState)
+_pool_graph.add_node("generate_batch", _generate_batch_node)
+_pool_graph.add_node("critique_batch", _critique_batch_node)
+_pool_graph.add_node("repair", _repair_node)
+_pool_graph.add_node("finalize", _finalize_pool_node)
+_pool_graph.set_entry_point("generate_batch")
+_pool_graph.add_edge("generate_batch", "critique_batch")
+_pool_graph.add_conditional_edges(
+    "critique_batch", _route_after_batch_critique, {"finalize": "finalize", "repair": "repair"}
+)
+_pool_graph.add_edge("repair", "critique_batch")
+_pool_graph.add_edge("finalize", END)
+_compiled_pool_graph = _pool_graph.compile()
+
+
+async def generate_scenario_question_pool(job: JobPosting, count: int = 3) -> list[tuple[str, int]]:
+    """
+    Single-call batch generation with a bounded batched critique/repair
+    pass, replacing the earlier "3 independent full pipelines" approach.
+    Cuts LLM calls from up to ~9 down to typically 2 (generate + critique),
+    worst case 4 (+ repair + re-critique). All 3 questions share one
+    time_limit_seconds, since swapping between them never resets the
+    candidate's clock anyway.
+
+    `count` is currently fixed at 3 by the response schema — kept as a
+    parameter for API stability, not because other values are supported.
+    Returns [] if generation failed entirely (unparseable batch output).
+    """
+    initial_state: ScenarioPoolGenState = {
+        "job_context": build_job_context(job),
+        "job_level": job.job_level.value if job.job_level else None,
+        "questions": [],
+        "time_limit": 300,
+        "feedback": [None, None, None],
+        "round": 0,
+        "final_questions": None,
+        "final_time_limit": 300,
+    }
+    try:
+        result = await _compiled_pool_graph.ainvoke(initial_state)
+    except Exception as exc:
+        logger.error(f"Scenario pool generation failed for job {job.id}: {exc}")
+        return []
+
+    questions = result.get("final_questions") or []
+    time_limit = result.get("final_time_limit", 300)
+    return [(q, time_limit) for q in questions]
