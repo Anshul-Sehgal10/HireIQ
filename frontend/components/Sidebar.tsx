@@ -89,7 +89,7 @@ export default function Sidebar() {
         <button
           onClick={toggle}
           aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
-          className="absolute -right-3 top-16 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
+          className="group absolute -right-3 top-16 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
         >
           <ChevronLeft size={13} className={cn("transition-transform duration-300", !open && "rotate-180")} />
         </button>

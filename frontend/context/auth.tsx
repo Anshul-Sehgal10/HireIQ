@@ -58,6 +58,7 @@ export function getAccessTokenFromCookie(): string | null {
 interface AuthUser {
   id: string;
   full_name: string;
+  email: string;
   role: "admin" | "employer" | "candidate";
   exp: number;
 }
@@ -78,6 +79,7 @@ function decodeJwt(token: string): AuthUser | null {
     return {
       id: payload.sub,
       full_name: payload.full_name,
+      email: payload.email,
       role: payload.role,
       exp: payload.exp,
     };
