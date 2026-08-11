@@ -71,7 +71,7 @@ type Stage =
 const DECOY_LINES = [
   "Nice try - nothing on this page copies out.",
   "This is a monitored assessment. Copying is disabled.",
-  "This isn't the content you're looking for. 👀",
+  "This isn't the content you're looking for.",
 ];
 
 function isDevToolsCombo(e: KeyboardEvent): boolean {

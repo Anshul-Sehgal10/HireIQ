@@ -28,12 +28,34 @@ function initialsFor(name: string) {
 
 function HireIQLogo({ size = 20 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M5 4v16M19 4v16M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M18 3l.6 1.4L20 5l-1.4.6L18 7l-.6-1.4L16 5l1.4-.6L18 3z" fill="currentColor" opacity="0.85" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <path
+        d="M5 4v16M19 4v16M5 12h14"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18 3l.6 1.4L20 5l-1.4.6L18 7l-.6-1.4L16 5l1.4-.6L18 3z"
+        fill="currentColor"
+        opacity="0.85"
+      />
     </svg>
   );
 }
+
+// Delta between expanded (248px) and collapsed (60px) sidebar widths — used
+// to slide the floating toggle button in lockstep with the aside's own
+// hover-triggered pop-out, since the outer wrapper's own width only
+// changes on `open` (pinned), never on hover alone.
+const EXPAND_DELTA_PX = 248 - 60;
 
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 
@@ -66,12 +88,18 @@ export default function Sidebar() {
   // and overlap it.
   const expanded = open || hovering;
 
+  // The toggle button only needs to physically slide when it's a
+  // hover-only expansion (sidebar not pinned) — when pinned, the outer
+  // wrapper itself is already 248px wide so the button's default offset
+  // already lines up.
+  const buttonFollowsHoverExpansion = hovering && !open;
+
   return (
     <div
       className={cn(
         "relative h-screen shrink-0",
         "transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-        open ? "w-[248px]" : "w-[60px]",
+        open ? "w-62" : "w-15",
       )}
     >
       <aside
@@ -80,20 +108,10 @@ export default function Sidebar() {
         className={cn(
           "absolute inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card text-foreground",
           "transition-[width,box-shadow] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-          expanded ? "w-[248px]" : "w-[60px]",
+          expanded ? "w-62" : "w-15",
           hovering && !open && "shadow-2xl shadow-black/10",
         )}
       >
-        {/* Floating collapse/expand handle — fixed position always, only the
-            chevron rotates, so toggling never shifts anything vertically. */}
-        <button
-          onClick={toggle}
-          aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
-          className="group absolute -right-3 top-16 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground"
-        >
-          <ChevronLeft size={13} className={cn("transition-transform duration-300", !open && "rotate-180")} />
-        </button>
-
         {/* Brand header */}
         <div className="flex h-14 shrink-0 items-center px-3">
           <Link
@@ -116,7 +134,9 @@ export default function Sidebar() {
               className={cn(
                 "text-[15px] font-bold tracking-tight text-foreground",
                 "transition-[opacity,transform] duration-200 ease-out",
-                expanded ? "translate-x-0 opacity-100" : "pointer-events-none absolute -translate-x-2 opacity-0",
+                expanded
+                  ? "translate-x-0 opacity-100"
+                  : "pointer-events-none absolute -translate-x-2 opacity-0",
               )}
             >
               HireIQ
@@ -131,7 +151,9 @@ export default function Sidebar() {
               "mb-1 px-2.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
               "text-muted-foreground/50 select-none",
               "transition-[opacity,max-height] duration-200 ease-out",
-              expanded ? "max-h-8 opacity-100" : "max-h-0 overflow-hidden opacity-0",
+              expanded
+                ? "max-h-8 opacity-100"
+                : "max-h-0 overflow-hidden opacity-0",
             )}
           >
             Menu
@@ -140,7 +162,8 @@ export default function Sidebar() {
           <div className="space-y-0.5">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href || pathname.startsWith(item.href + "/");
+              const active =
+                pathname === item.href || pathname.startsWith(item.href + "/");
 
               return (
                 <Link
@@ -148,7 +171,7 @@ export default function Sidebar() {
                   href={item.href}
                   title={!expanded ? item.label : undefined}
                   className={cn(
-                    "group relative flex items-center rounded-lg py-[9px] text-[13px] transition-colors duration-150",
+                    "group relative flex items-center rounded-lg py-2.25 text-[13px] transition-colors duration-150",
                     expanded ? "gap-3 px-2.5" : "justify-center px-0",
                     active
                       ? "text-foreground font-semibold"
@@ -158,7 +181,7 @@ export default function Sidebar() {
                   {active && (
                     <span
                       className={cn(
-                        "absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full bg-primary",
+                        "absolute left-0 top-1/2 -translate-y-1/2 w-0.75 h-5 rounded-r-full bg-primary",
                         "origin-center animate-sidebar-indicator",
                       )}
                     />
@@ -168,7 +191,9 @@ export default function Sidebar() {
                     className={cn(
                       "flex h-5 w-5 shrink-0 items-center justify-center",
                       "transition-colors duration-150",
-                      active ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                      active
+                        ? "text-primary"
+                        : "text-muted-foreground group-hover:text-foreground",
                     )}
                   >
                     <Icon size={17} />
@@ -178,7 +203,9 @@ export default function Sidebar() {
                     className={cn(
                       "truncate whitespace-nowrap",
                       "transition-[opacity,transform] duration-200 ease-out",
-                      expanded ? "translate-x-0 opacity-100" : "pointer-events-none absolute -translate-x-2 opacity-0",
+                      expanded
+                        ? "translate-x-0 opacity-100"
+                        : "pointer-events-none absolute -translate-x-2 opacity-0",
                     )}
                   >
                     {item.label}
@@ -190,7 +217,10 @@ export default function Sidebar() {
         </nav>
 
         {/* Footer: profile + theme toggle */}
-        <div className="relative shrink-0 border-t border-border px-2 py-2" ref={menuRef}>
+        <div
+          className="relative shrink-0 border-t border-border px-2 py-2"
+          ref={menuRef}
+        >
           {menuOpen && (
             <div
               className={cn(
@@ -203,8 +233,12 @@ export default function Sidebar() {
                   {initialsFor(user.full_name ?? "?")}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate text-[13px] font-semibold text-popover-foreground">{user.full_name}</p>
-                  <p className="truncate text-[11px] font-normal capitalize text-muted-foreground">{user.role}</p>
+                  <p className="truncate text-[13px] font-semibold text-popover-foreground">
+                    {user.full_name}
+                  </p>
+                  <p className="truncate text-[11px] font-normal capitalize text-muted-foreground">
+                    {user.role}
+                  </p>
                 </div>
               </div>
 
@@ -252,12 +286,22 @@ export default function Sidebar() {
             </div>
           )}
 
-          <div className={cn("flex items-center", expanded ? "gap-1" : "flex-col gap-2")}>
+          {/* Row itself always stacks as a flex-row when expanded (pinned OR
+              hover) so the profile button + theme toggle sit side by side;
+              collapsed state stays a centered column with just the avatar. */}
+          <div
+            className={cn(
+              "flex items-center",
+              expanded ? "flex-row gap-1" : "flex-col gap-2",
+            )}
+          >
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className={cn(
                 "flex min-w-0 items-center gap-2.5 rounded-lg transition-colors hover:bg-muted",
-                expanded ? "flex-1 px-2 py-1.5 text-left" : "justify-center p-1.5",
+                expanded
+                  ? "flex-1 px-2 py-1.5 text-left"
+                  : "justify-center p-1.5",
               )}
             >
               <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-bold text-primary">
@@ -268,13 +312,17 @@ export default function Sidebar() {
                 className={cn(
                   "flex min-w-0 flex-1 flex-col items-start",
                   "transition-[opacity,transform] duration-200 ease-out",
-                  expanded ? "translate-x-0 opacity-100" : "pointer-events-none absolute -translate-x-2 opacity-0",
+                  expanded
+                    ? "translate-x-0 opacity-100"
+                    : "pointer-events-none absolute -translate-x-2 opacity-0",
                 )}
               >
                 <span className="w-full truncate text-[13px] font-semibold text-foreground">
                   {user.full_name ?? "Profile"}
                 </span>
-                <span className="text-[11px] font-normal capitalize text-muted-foreground">{user.role}</span>
+                <span className="text-[11px] font-normal capitalize text-muted-foreground">
+                  {user.role}
+                </span>
               </div>
 
               <ChevronsUpDown
@@ -282,15 +330,53 @@ export default function Sidebar() {
                 className={cn(
                   "shrink-0 text-muted-foreground",
                   "transition-opacity duration-200",
-                  expanded ? "opacity-100" : "pointer-events-none absolute opacity-0",
+                  expanded
+                    ? "opacity-100"
+                    : "pointer-events-none absolute opacity-0",
                 )}
               />
             </button>
 
-            <ThemeToggle />
+            {/* Only rendered when PINNED open — a hover-only expansion never
+                shows it, so it can't visually shift things as the pointer
+                enters/leaves. */}
+            {expanded && (
+              <div className="shrink-0">
+                <ThemeToggle />
+              </div>
+            )}
           </div>
         </div>
       </aside>
+
+      {/* Floating collapse/expand handle — sibling of <aside>, so it has no
+          mouseenter/mouseleave of its own and hovering it can never
+          pre-trigger the sidebar's hover-expansion (click-to-pin stays a
+          single, immediate action).
+          It DOES need to visually track the aside's hover pop-out though —
+          the outer wrapper's own width only changes on `open` (pinned), so
+          without this the button would sit frozen at the 60px-collapsed
+          edge while the aside visually expands out from under it. The
+          translateX below shifts it by the same 188px the aside expands
+          by, only while that expansion is hover-driven (not pinned). */}
+      <button
+        onClick={toggle}
+        aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
+        style={{
+          transform: buttonFollowsHoverExpansion
+            ? `translateX(${EXPAND_DELTA_PX}px)`
+            : "translateX(0)",
+        }}
+        className="group absolute -right-3 top-16 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] hover:bg-muted hover:text-foreground"
+      >
+        <ChevronLeft
+          size={13}
+          className={cn(
+            "transition-transform duration-300",
+            !open && "rotate-180",
+          )}
+        />
+      </button>
     </div>
   );
 }
