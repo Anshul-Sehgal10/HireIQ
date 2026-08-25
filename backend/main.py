@@ -1,5 +1,5 @@
 """
-Outer entry point — run with:  python main.py
+Outer entry point - run with:  python main.py
 Or directly:                   uvicorn app.main:app --reload
 """
 

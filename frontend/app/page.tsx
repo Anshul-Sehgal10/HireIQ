@@ -50,24 +50,35 @@ export default function Home() {
           <div className="relative z-10 mx-auto grid w-full max-w-6xl gap-10 px-4 sm:gap-12 sm:px-6 md:grid-cols-2 md:py-14 lg:py-16">
             <div className="flex flex-col justify-center animate-fade-in">
               <h1 className="text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl lg:text-5xl">
-                A resume can be written by ChatGPT.
+                A resume can be written by an AI.
                 <br />
-                <span className="text-primary">A timed, live scenario can't.</span>
+                <span className="text-primary">
+                  A timed, live scenario can't.
+                </span>
               </h1>
               <p className="mt-4 max-w-lg text-sm leading-relaxed text-muted-foreground sm:mt-5 sm:text-base">
-                Every applicant answers a role-specific scenario question, generated fresh from
-                the job description, inside a locked, time-boxed test environment. We don't just
-                grade the answer - we grade how they think. It's the one hiring signal AI-polish
-                can't fake.
+                Every applicant answers a role-specific scenario question,
+                generated fresh from the job description, inside a locked,
+                time-boxed test environment. We don't just grade the answer - we
+                grade how they think. It's the one hiring signal AI-polish can't
+                fake.
               </p>
               <div className="mt-7 flex flex-col gap-3 sm:mt-8 sm:flex-row">
                 <Link href="/auth/register" className="w-full sm:w-auto">
-                  <Button size="lg" rightIcon={<ArrowRight size={16} />} className="w-full sm:w-auto">
+                  <Button
+                    size="lg"
+                    rightIcon={<ArrowRight size={16} />}
+                    className="w-full sm:w-auto"
+                  >
                     I'm hiring
                   </Button>
                 </Link>
                 <Link href="/auth/register" className="w-full sm:w-auto">
-                  <Button size="lg" variant="outline" className="w-full sm:w-auto">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                  >
                     I'm looking for a job
                   </Button>
                 </Link>
@@ -83,7 +94,10 @@ export default function Home() {
         </section>
 
         {/* Feature timeline */}
-        <section id="scenario-engine" className="relative py-16 sm:py-20 md:py-24">
+        <section
+          id="scenario-engine"
+          className="relative py-16 sm:py-20 md:py-24"
+        >
           <div
             className="absolute inset-0 bg-dot-grid opacity-40 [mask-image:radial-gradient(ellipse_60%_60%_at_50%_45%,black,transparent)]"
             aria-hidden="true"
@@ -92,11 +106,14 @@ export default function Home() {
           <div className="relative mx-auto max-w-6xl px-4 sm:px-6">
             <ScrollReveal className="mx-auto max-w-2xl text-center">
               <h2 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
-                Built to replace <span className="text-primary">the whole broken hiring loop</span>
+                Built to replace{" "}
+                <span className="text-primary">
+                  the whole broken hiring loop
+                </span>
               </h2>
               <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
-                Not just a better job board - a pre-qualification, screening, and communication
-                layer, end to end.
+                Not just a better job board - a pre-qualification, screening,
+                and communication layer, end to end.
               </p>
             </ScrollReveal>
 
@@ -119,11 +136,14 @@ export default function Home() {
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <ScrollReveal className="mx-auto mb-10 max-w-2xl text-center sm:mb-14">
             <h2 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl lg:text-4xl">
-              One platform, <span className="text-primary">two paths that meet in the middle</span>
+              One platform,{" "}
+              <span className="text-primary">
+                two paths that meet in the middle
+              </span>
             </h2>
             <p className="mt-3 text-sm text-muted-foreground sm:mt-4 sm:text-base">
-              Candidates and employers move through the same pipeline from opposite ends -
-              here's what each side actually does.
+              Candidates and employers move through the same pipeline from
+              opposite ends - here's what each side actually does.
             </p>
           </ScrollReveal>
 
@@ -147,10 +167,22 @@ export default function Home() {
                 title="Apply less. Get seen more."
                 tagline="Your resume works for you instead of disappearing into a pile."
                 steps={[
-                  { icon: Upload, text: "Upload your resume once - we embed it and match it against every open role." },
-                  { icon: Search, text: "See a personalized, ranked feed instead of a generic job board." },
-                  { icon: Timer, text: "Prove yourself with a scenario, not just a polished PDF." },
-                  { icon: TrendingUp, text: "Track every application live - no more email black holes." },
+                  {
+                    icon: Upload,
+                    text: "Upload your resume once - we embed it and match it against every open role.",
+                  },
+                  {
+                    icon: Search,
+                    text: "See a personalized, ranked feed instead of a generic job board.",
+                  },
+                  {
+                    icon: Timer,
+                    text: "Prove yourself with a scenario, not just a polished PDF.",
+                  },
+                  {
+                    icon: TrendingUp,
+                    text: "Track every application live - no more email black holes.",
+                  },
                 ]}
                 ctaLabel="Find your next role"
                 href="/auth/register"
@@ -165,10 +197,22 @@ export default function Home() {
                 title="Screen for thinking, not prompting."
                 tagline="Spend time on candidates who've already proven real ability."
                 steps={[
-                  { icon: Briefcase, text: "Post a role and optionally enable the Scenario Engine - no setup beyond a toggle." },
-                  { icon: ListChecks, text: "Get a ranked candidate list with match score, scenario score, and an AI summary." },
-                  { icon: MessagesSquare, text: "Manage the entire pipeline in one broadcast channel - no spreadsheets." },
-                  { icon: Gauge, text: "See live token cost per job, per hire - full cost transparency." },
+                  {
+                    icon: Briefcase,
+                    text: "Post a role and optionally enable the Scenario Engine - no setup beyond a toggle.",
+                  },
+                  {
+                    icon: ListChecks,
+                    text: "Get a ranked candidate list with match score, scenario score, and an AI summary.",
+                  },
+                  {
+                    icon: MessagesSquare,
+                    text: "Manage the entire pipeline in one broadcast channel - no spreadsheets.",
+                  },
+                  {
+                    icon: Gauge,
+                    text: "See live token cost per job, per hire - full cost transparency.",
+                  },
                 ]}
                 ctaLabel="Start hiring"
                 href="/auth/register"
@@ -189,7 +233,8 @@ export default function Home() {
           </div>
           <div className="flex flex-col items-center gap-2 sm:flex-row sm:gap-3">
             <p className="max-w-xs sm:max-w-none">
-              AI-native hiring - built for people who ship products, not just features.
+              AI-native hiring - built for people who ship products, not just
+              features.
             </p>
             <span aria-hidden="true" className="text-muted-foreground/70">
               •
@@ -204,14 +249,30 @@ export default function Home() {
               >
                 <FaGithub size={14} />
               </a>
-              <p className="max-w-xs sm:max-w-none">Made by @Anshul-Sehgal10</p>
+              <p className="max-w-xs sm:max-w-none">
+                Made by{" "}
+                <a
+                  href="https://github.com/Anshul-Sehgal10"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-foreground transition-colors"
+                >
+                  @Anshul-Sehgal10
+                </a>
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/auth/login" className="hover:text-foreground transition-colors">
+            <Link
+              href="/auth/login"
+              className="hover:text-foreground transition-colors"
+            >
               Sign in
             </Link>
-            <Link href="/auth/register" className="hover:text-foreground transition-colors">
+            <Link
+              href="/auth/register"
+              className="hover:text-foreground transition-colors"
+            >
               Register
             </Link>
           </div>
@@ -259,8 +320,12 @@ function RolePathCard({
           <Icon size={20} />
         </div>
         <div>
-          <span className="text-xs font-semibold uppercase tracking-widest text-primary">{eyebrow}</span>
-          <h3 className="text-base font-bold text-foreground sm:text-lg">{title}</h3>
+          <span className="text-xs font-semibold uppercase tracking-widest text-primary">
+            {eyebrow}
+          </span>
+          <h3 className="text-base font-bold text-foreground sm:text-lg">
+            {title}
+          </h3>
         </div>
       </div>
 
@@ -289,7 +354,11 @@ function RolePathCard({
       </ol>
 
       <Link href={href} className="mt-7 block sm:mt-8">
-        <Button variant="outline" className="w-full" rightIcon={<ArrowRight size={16} />}>
+        <Button
+          variant="outline"
+          className="w-full"
+          rightIcon={<ArrowRight size={16} />}
+        >
           {ctaLabel}
         </Button>
       </Link>
