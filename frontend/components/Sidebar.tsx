@@ -174,7 +174,7 @@ export default function Sidebar() {
                     "group relative flex items-center rounded-lg py-2.25 text-[13px] transition-colors duration-150",
                     expanded ? "gap-3 px-2.5" : "justify-center px-0",
                     active
-                      ? "text-foreground font-semibold"
+                      ? "bg-primary/10 text-foreground font-semibold"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground font-medium",
                   )}
                 >
@@ -353,8 +353,11 @@ export default function Sidebar() {
           mouseenter/mouseleave of its own and hovering it can never
           pre-trigger the sidebar's hover-expansion (click-to-pin stays a
           single, immediate action).
-          It DOES need to visually track the aside's hover pop-out though —
-          the outer wrapper's own width only changes on `open` (pinned), so
+          Moved up to `top-4` so it now sits level with the header/logo row
+          instead of floating lower on the border next to the nav list —
+          reads as part of the header, not a stray control on the divider.
+          It still needs to visually track the aside's hover pop-out — the
+          outer wrapper's own width only changes on `open` (pinned), so
           without this the button would sit frozen at the 60px-collapsed
           edge while the aside visually expands out from under it. The
           translateX below shifts it by the same 188px the aside expands
@@ -367,7 +370,7 @@ export default function Sidebar() {
             ? `translateX(${EXPAND_DELTA_PX}px)`
             : "translateX(0)",
         }}
-        className="group absolute -right-3 top-16 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] hover:bg-muted hover:text-foreground"
+        className="group absolute -right-3 top-4 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] hover:bg-muted hover:text-foreground"
       >
         <ChevronLeft
           size={13}

@@ -58,6 +58,18 @@ async def get_org_for_user(db: AsyncSession, user_id: uuid.UUID) -> Optional[Org
     return result.scalar_one_or_none()
 
 
+async def update_org(db: AsyncSession, org: Organization, updates: dict) -> Organization:
+    """Applies PATCH-style updates to editable profile fields. Callers pass
+    the result of OrgUpdate.model_dump(exclude_none=True) so only fields the
+    client actually sent are touched — omitted fields stay as-is, and an
+    empty string ("") is a valid way to explicitly clear a field."""
+    for key, value in updates.items():
+        setattr(org, key, value)
+    await db.commit()
+    await db.refresh(org)
+    return org
+
+
 async def get_membership(
     db: AsyncSession, user_id: uuid.UUID, org_id: uuid.UUID
 ) -> Optional[OrgMember]:

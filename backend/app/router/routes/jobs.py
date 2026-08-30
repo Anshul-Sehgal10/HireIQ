@@ -65,6 +65,7 @@ async def list_mine(
             scenario_score_threshold=job.scenario_score_threshold,
             role_summary=job.role_summary,
             applicant_count=counts.get(job.id, 0),
+            created_at=job.created_at,
         )
         for job in jobs
     ]
@@ -151,6 +152,7 @@ async def get_one(
         org_domain=org.domain if org else None,
         org_verification_status=org.verification_status.value if org else "pending",
         applicant_count=await count_applications_by_job(db, job.id),
+        created_at=job.created_at,
     )
 
 

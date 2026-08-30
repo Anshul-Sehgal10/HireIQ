@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  ChevronRight,
   Inbox,
   Send,
   Award,
@@ -23,6 +24,7 @@ import {
   SkeletonCard,
   SkeletonText,
   Button,
+  Badge,
   Input,
   StatusBadge,
   useToast,
@@ -149,7 +151,7 @@ function DashboardContent() {
     }
   };
 
-    const inProgress =
+  const inProgress =
     (overview?.status_counts["scenario_pending"] ?? 0) +
     (overview?.status_counts["resume_passed"] ?? 0) +
     (overview?.status_counts["scenario_submitted"] ?? 0);
@@ -249,7 +251,7 @@ function DashboardContent() {
       <div className="space-y-8 p-6">
         {/* ---------------------------------------------------------------- */}
         {/* Stat cards — quiet watermark-icon treatment, static (no hover),   */}
-        {/* numbers count up on load.                                        */}
+        {/* numbers count up on load, tinted borders, contextual subtext.     */}
         {/* ---------------------------------------------------------------- */}
         {loading ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -260,14 +262,27 @@ function DashboardContent() {
         ) : (
           overview && (
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard icon={Send} accent="primary" label="Applications" value={overview.total_applications} />
+              <StatCard
+                icon={Send}
+                accent="primary"
+                label="Applications"
+                value={overview.total_applications}
+                subtext="All submitted applications"
+              />
               <StatCard
                 icon={Award}
                 accent="success"
                 label="Shortlisted"
                 value={overview.status_counts["shortlisted"] ?? 0}
+                subtext="Moved into a pipeline"
               />
-              <StatCard icon={Hourglass} accent="warning" label="In progress" value={inProgress} />
+              <StatCard
+                icon={Hourglass}
+                accent="warning"
+                label="In progress"
+                value={inProgress}
+                subtext="Awaiting your next step"
+              />
               <StatCard
                 icon={Repeat2}
                 accent="primary"
@@ -277,6 +292,7 @@ function DashboardContent() {
                     ? "Unlimited"
                     : `${overview.overrides_remaining}/${overview.override_apps_limit}`
                 }
+                subtext="Resets monthly"
               />
             </div>
           )
@@ -306,7 +322,7 @@ function DashboardContent() {
         {/* Applications                                                     */}
         {/* ---------------------------------------------------------------- */}
         <div>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
               Your applications
             </h2>
@@ -323,6 +339,9 @@ function DashboardContent() {
             )}
           </div>
 
+          {/* Filter chips sit directly under the search row now (tighter
+              gap, same visual block) instead of floating as a separate
+              section with a large gap beneath it. */}
           {applications.length > 0 && (
             <div className="mb-4 flex flex-wrap gap-1.5">
               <FilterChip active={statusFilter === "all"} onClick={() => setStatusFilter("all")}>
@@ -337,7 +356,7 @@ function DashboardContent() {
           )}
 
           {loading && (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               <Card className="p-4">
                 <SkeletonText lines={2} />
               </Card>
@@ -369,25 +388,35 @@ function DashboardContent() {
             <p className="py-10 text-center text-sm text-muted-foreground">No applications match your filters.</p>
           )}
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {/* 3-col from lg (not xl) — at typical desktop widths two cards
+              were leaving a large empty void on the right. */}
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filteredApplications.map((app) => {
               const needsAction = app.status === "scenario_pending" && app.scenario_meets_threshold === false;
               const inPipeline = ["shortlisted", "assessment", "interview", "offer"].includes(app.status);
 
               return (
-                <Card key={app.id} interactive onClick={() => setSelectedJobId(app.job_id)} className="p-4">
+                <Card key={app.id} interactive onClick={() => setSelectedJobId(app.job_id)} className="group p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-foreground">{app.job_title}</p>
+                    <div className="min-w-0 flex-1">
+                      {/* line-clamp instead of truncate — titles that fit on
+                          two lines no longer cut off early with room to spare. */}
+                      <p className="line-clamp-2 break-words text-sm font-semibold leading-snug text-foreground">
+                        {app.job_title}
+                      </p>
                       <p className="truncate text-xs text-muted-foreground">{app.org_name}</p>
                     </div>
                     <StatusBadge status={app.status} className="shrink-0" />
                   </div>
 
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {formatAppliedDate(app.applied_at)}
-                    {app.is_override && <span className="text-warning"> · override used</span>}
-                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <p className="text-xs text-muted-foreground">{formatAppliedDate(app.applied_at)}</p>
+                    {app.is_override && (
+                      <Badge variant="warning" className="py-0 text-[10px]">
+                        Override used
+                      </Badge>
+                    )}
+                  </div>
 
                   {inPipeline && (
                     <Link
@@ -418,6 +447,15 @@ function DashboardContent() {
                           Withdraw
                         </Button>
                       )}
+                    </div>
+                  )}
+
+                  {/* Explicit click affordance — cards previously looked like
+                      static display blocks with no visual cue they're
+                      interactive beyond the hover border. */}
+                  {!needsAction && (
+                    <div className="mt-3 flex items-center justify-end gap-1 text-[11px] font-medium text-muted-foreground/70 transition-colors group-hover:text-primary">
+                      View status <ChevronRight size={12} />
                     </div>
                   )}
                 </Card>
@@ -473,8 +511,9 @@ function useCountUp(value: number, duration = 700) {
 
 // ---------------------------------------------------------------------------
 // Stat card — quiet, static (no hover — these aren't clickable), label+icon
-// on top, big number below, with the icon repeated large and very faint as
-// a background watermark instead of a solid icon tile.
+// on top, big number below, a subtle tinted border matching the accent, an
+// optional contextual subtext line, and a much fainter watermark icon so it
+// no longer competes with the real icon/label.
 // ---------------------------------------------------------------------------
 
 type Accent = "primary" | "success" | "warning";
@@ -489,32 +528,42 @@ const ACCENT_TEXT: Record<Accent, string> = {
   success: "text-success-foreground",
   warning: "text-warning-foreground",
 };
+// Tinted borders — success/warning already have dedicated border tokens;
+// primary doesn't, so it's approximated with the accent at low opacity.
+const ACCENT_BORDER: Record<Accent, string> = {
+  primary: "border-primary/15",
+  success: "border-success-border",
+  warning: "border-warning-border",
+};
 
 function StatCard({
   icon: Icon,
   accent,
   label,
   value,
+  subtext,
 }: {
   icon: React.ElementType;
   accent: Accent;
   label: string;
   value: string | number;
+  subtext?: string;
 }) {
   const numeric = typeof value === "number";
   const countRef = useCountUp(numeric ? value : 0);
 
   return (
-    <Card className={cn("relative overflow-hidden p-4", ACCENT_BG[accent])}>
-      <Icon size={64} className={cn("pointer-events-none absolute -right-3 -top-3 opacity-[0.07]", ACCENT_TEXT[accent])} />
-      <CardContent className="relative p-0">
-        <div className="mb-2 flex items-center gap-1.5">
+    <Card className={cn("relative overflow-hidden p-3.5", ACCENT_BG[accent], ACCENT_BORDER[accent])}>
+      <Icon size={56} className={cn("pointer-events-none absolute -right-3 -top-3 opacity-[0.04]", ACCENT_TEXT[accent])} />
+      <CardContent className="relative space-y-1.5 p-0">
+        <div className="flex items-center gap-1.5">
           <Icon size={13} className={ACCENT_TEXT[accent]} />
           <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
         </div>
         <p className="text-2xl font-bold tabular-nums text-foreground">
           {numeric ? <span ref={countRef}>0</span> : value}
         </p>
+        {subtext && <p className="text-[11px] text-muted-foreground/80">{subtext}</p>}
       </CardContent>
     </Card>
   );

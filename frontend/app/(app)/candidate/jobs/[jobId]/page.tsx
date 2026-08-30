@@ -11,6 +11,7 @@ import {
   Sparkles,
   ShieldCheck,
   Users,
+  ArrowUpRight,
 } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
@@ -36,6 +37,7 @@ interface JobDetail {
   scenario_enabled: boolean;
   scenario_score_threshold: number;
   applicant_count?: number | null;
+  org_id: string;
   org_name: string;
   org_domain: string | null;
   org_verification_status: string;
@@ -478,6 +480,12 @@ function Content() {
                   </div>
                 )}
               </div>
+              <Link
+                href={`/candidate/organizations/${detail.org_id}`}
+                className="mt-4 flex items-center justify-center gap-1.5 rounded-lg border border-border py-2 text-xs font-semibold text-foreground transition-colors hover:border-primary/40 hover:bg-muted"
+              >
+                View organisation <ArrowUpRight size={13} />
+              </Link>
             </Card>
           </aside>
         </div>

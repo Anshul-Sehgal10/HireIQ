@@ -12,7 +12,10 @@ const STATUS_CONFIG: Record<string, { label: string; variant: BadgeVariant }> = 
   resume_rejected: { label: "Below match bar", variant: "danger" },
   resume_passed: { label: "Resume passed", variant: "primary" },
   scenario_pending: { label: "Scenario in progress", variant: "warning" },
-  scenario_submitted: { label: "Scenario submitted", variant: "primary" },
+  // Was "primary" — same tone as assessment/CTA buttons, making it hard to
+  // scan at a glance. This is a "waiting on us" state, not an active-action
+  // state, so it now reads as amber (in-review) instead of indigo.
+  scenario_submitted: { label: "In review", variant: "warning" },
   shortlisted: { label: "Shortlisted", variant: "success" },
   assessment: { label: "Assessment", variant: "primary" },
   interview: { label: "Interview", variant: "primary" },

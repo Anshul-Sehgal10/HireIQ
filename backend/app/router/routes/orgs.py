@@ -3,8 +3,11 @@ Organisation management routes.
 
 POST   /orgs/                          → create org (caller becomes OWNER)
 GET    /orgs/mine                      → get caller's org
+PATCH  /orgs/mine                      → update caller's org profile (owner only)
 GET    /orgs/mine/members              → list members
 DELETE /orgs/mine/members/{user_id}    → remove member (owner only)
+
+GET    /orgs/{org_id}/public           → public org profile (any authenticated user)
 
 POST   /orgs/invites/                  → send invite (owner/recruiter)
 GET    /orgs/invites/                  → list outgoing pending invites
@@ -29,11 +32,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.dependencies import CurrentUser, EmployerUser, get_db
+from app.db.models.job import JobStatus
 from app.db.models.org_invites import InviteDirection, InviteStatus
 from app.db.models.org_members import OrgRole
 from app.db.models.organization import VerificationStatus
 from app.db.models.user import User
 from app.repositories import org_repo
+from app.repositories.job_repo import list_jobs_by_org
 from app.schemas.org import (
     InviteCreate,
     InviteResponse,
@@ -41,7 +46,11 @@ from app.schemas.org import (
     JoinRequestCreate,
     OrgCreate,
     OrgMemberResponse,
+    OrgPublicJobResponse,
+    OrgPublicMemberResponse,
+    OrgPublicResponse,
     OrgResponse,
+    OrgUpdate,
 )
 
 router = APIRouter(prefix="/orgs", tags=["orgs"])
@@ -95,6 +104,26 @@ async def get_my_org(
     return response
 
 
+@router.patch("/mine", response_model=OrgResponse)
+async def update_my_org(
+    body: OrgUpdate,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Owner-only. Updates whichever profile fields are present in the
+    request body — see OrgUpdate for the editable set (name, domain,
+    description, website, industry, company_size, logo_url)."""
+    org = await org_repo.get_org_for_user(db, user.id)
+    if not org:
+        raise HTTPException(404, "You are not a member of any organisation")
+
+    membership = await org_repo.get_membership(db, user.id, org.id)
+    _assert_owner(membership)
+
+    org = await org_repo.update_org(db, org, body.model_dump(exclude_none=True))
+    return OrgResponse.model_validate(org)
+
+
 @router.get("/mine/members", response_model=List[OrgMemberResponse])
 async def list_members(
     user: CurrentUser,
@@ -140,6 +169,48 @@ async def remove_member(
     removed = await org_repo.remove_member(db, org.id, target_user_id)
     if not removed:
         raise HTTPException(404, "Member not found")
+
+
+# ---------------------------------------------------------------------------
+# Public org profile — candidate-facing (any authenticated role can view)
+# ---------------------------------------------------------------------------
+
+@router.get("/{org_id}/public", response_model=OrgPublicResponse)
+async def get_org_public(
+    org_id: uuid.UUID,
+    user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    org = await org_repo.get_org_by_id(db, org_id)
+    if not org:
+        raise HTTPException(404, "Organisation not found")
+
+    all_jobs = await list_jobs_by_org(db, org.id)
+    open_jobs = [j for j in all_jobs if j.status == JobStatus.PUBLISHED]
+
+    members = await org_repo.list_members(db, org.id)
+    member_responses: List[OrgPublicMemberResponse] = []
+    for m in members:
+        u = await db.get(User, m.user_id)
+        if u and u.is_active:
+            member_responses.append(
+                OrgPublicMemberResponse(id=m.id, full_name=u.full_name, role=m.role)
+            )
+
+    return OrgPublicResponse(
+        id=org.id,
+        name=org.name,
+        domain=org.domain,
+        description=org.description,
+        website=org.website,
+        industry=org.industry,
+        company_size=org.company_size,
+        logo_url=org.logo_url,
+        verification_status=org.verification_status,
+        member_count=len(member_responses),
+        open_jobs=[OrgPublicJobResponse.model_validate(j) for j in open_jobs],
+        members=member_responses,
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -1,3 +1,4 @@
+from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
 from pydantic import BaseModel, Field
@@ -48,6 +49,9 @@ class JobResponse(BaseModel):
     org_name: Optional[str] = None
     role_summary: Optional[str] = None
     applicant_count: Optional[int] = None
+    # Exposed for "Posted Xd ago" on the candidate job feed — was already
+    # on the ORM model (TimestampMixin) but never surfaced in the schema.
+    created_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 

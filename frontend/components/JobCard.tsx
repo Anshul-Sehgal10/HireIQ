@@ -1,10 +1,12 @@
 "use client";
 
-import { MapPin, Briefcase, Sparkles, ArrowUpRight } from "lucide-react";
-import { Card, CardContent, Badge } from "@/components/ui";
+import Link from "next/link";
+import { ArrowUpRight, Briefcase, Building2, ChevronRight, Clock, MapPin, Sparkles } from "lucide-react";
+import { Card, CardContent, StatusBadge } from "@/components/ui";
 
 interface JobCardJob {
   id: string;
+  org_id?: string;
   title: string;
   description: string;
   role_summary?: string | null;
@@ -16,6 +18,7 @@ interface JobCardJob {
   org_name?: string | null;
   categories: string[] | null;
   scenario_enabled: boolean;
+  created_at?: string | null;
 }
 
 interface JobCardProps {
@@ -33,53 +36,128 @@ function formatSalary(min: number | null, max: number | null) {
   return null;
 }
 
-function truncate(text: string, max: number) {
-  if (!text) return "";
-  return text.length <= max ? text : `${text.slice(0, max).trimEnd()}…`;
+function formatPostedDate(iso?: string | null) {
+  if (!iso) return null;
+  const date = new Date(iso);
+  const diffDays = Math.floor((Date.now() - date.getTime()) / 86_400_000);
+  if (diffDays <= 0) return "Posted today";
+  if (diffDays === 1) return "Posted yesterday";
+  if (diffDays < 30) return `Posted ${diffDays}d ago`;
+  return `Posted ${Math.floor(diffDays / 30)}mo ago`;
+}
+
+function orgInitials(name?: string | null) {
+  if (!name) return "?";
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase())
+      .join("") || "?"
+  );
+}
+
+const PILL_TONE: Record<"default" | "primary" | "warning", string> = {
+  default: "bg-muted text-muted-foreground",
+  primary: "bg-primary/10 text-primary",
+  warning: "bg-warning-bg text-warning-foreground",
+};
+
+function MetaPill({
+  icon: Icon,
+  tone = "default",
+  children,
+}: {
+  icon: React.ElementType;
+  tone?: "default" | "primary" | "warning";
+  children: React.ReactNode;
+}) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${PILL_TONE[tone]}`}>
+      <Icon size={11} className="shrink-0" />
+      {children}
+    </span>
+  );
 }
 
 export default function JobCard({ job, applied, applicationStatus, onClick }: JobCardProps) {
   const salary = formatSalary(job.salary_min, job.salary_max);
-  const summary = job.role_summary?.trim() || truncate(job.description, 130);
-  const meta = [job.work_mode, job.job_level].filter(Boolean);
+  const summary = job.role_summary?.trim() || job.description;
+  const posted = formatPostedDate(job.created_at);
 
   return (
-    <Card interactive onClick={onClick} className="group p-4">
-      <CardContent className="p-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-semibold text-foreground">{job.title}</h3>
-            {job.org_name && <p className="truncate text-xs text-muted-foreground">{job.org_name}</p>}
+    <Card interactive onClick={onClick} className="group flex h-full flex-col p-4">
+      <CardContent className="flex h-full flex-col p-0">
+        <div className="flex-1 space-y-3">
+          {/* Logo + title/company + status */}
+          <div className="flex items-start gap-3">
+            {job.org_id ? (
+              <Link
+                href={`/candidate/organizations/${job.org_id}`}
+                onClick={(e) => e.stopPropagation()}
+                title={job.org_name ?? undefined}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+              >
+                {orgInitials(job.org_name)}
+              </Link>
+            ) : (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                {orgInitials(job.org_name)}
+              </span>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <h3 className="line-clamp-2 text-sm font-bold leading-snug text-foreground sm:text-[15px]">{job.title}</h3>
+              {job.org_name && <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">{job.org_name}</p>}
+            </div>
+
+            {applied ? (
+              <StatusBadge status={applicationStatus ?? "pending"} className="shrink-0" />
+            ) : (
+              <ArrowUpRight
+                size={15}
+                className="mt-1 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-primary"
+              />
+            )}
           </div>
-          {applied ? (
-            <Badge variant="success" className="shrink-0 whitespace-nowrap capitalize">
-              {(applicationStatus ?? "applied").replace(/_/g, " ")}
-            </Badge>
-          ) : (
-            <ArrowUpRight size={15} className="mt-0.5 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-primary" />
+
+          {salary && (
+            <span className="inline-flex items-center rounded-md bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-foreground">
+              {salary}
+            </span>
           )}
+
+          {summary && <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{summary}</p>}
+
+          <div className="flex flex-wrap gap-1.5">
+            {job.location && <MetaPill icon={MapPin}>{job.location}</MetaPill>}
+            {job.work_mode && (
+              <MetaPill icon={Building2} tone="primary">
+                <span className="capitalize">{job.work_mode}</span>
+              </MetaPill>
+            )}
+            {job.job_level && (
+              <MetaPill icon={Briefcase} tone="warning">
+                <span className="capitalize">{job.job_level}</span>
+              </MetaPill>
+            )}
+            {job.scenario_enabled && <MetaPill icon={Sparkles} tone="primary">Scenario</MetaPill>}
+          </div>
         </div>
 
-        {salary && <p className="mt-2 text-xs font-semibold text-foreground">{salary}</p>}
-
-        {summary && <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{summary}</p>}
-
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
-          {job.location && (
-            <span className="flex items-center gap-1.5">
-              <MapPin size={12} className="shrink-0" /> {job.location}
-            </span>
-          )}
-          {meta.length > 0 && (
-            <span className="flex items-center gap-1.5 capitalize">
-              <Briefcase size={12} className="shrink-0" /> {meta.join(" · ")}
-            </span>
-          )}
-          {job.scenario_enabled && (
-            <span className="flex items-center gap-1.5 text-primary">
-              <Sparkles size={12} className="shrink-0" /> Scenario
-            </span>
-          )}
+        <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+          <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+            {posted && (
+              <>
+                <Clock size={11} />
+                {posted}
+              </>
+            )}
+          </span>
+          <span className="flex items-center gap-1 text-[11px] font-semibold text-primary opacity-0 transition-opacity group-hover:opacity-100">
+            View details <ChevronRight size={12} />
+          </span>
         </div>
       </CardContent>
     </Card>

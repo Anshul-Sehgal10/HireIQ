@@ -8,6 +8,7 @@ from sqlalchemy import (
     Index,
     Integer,
     String,
+    Text,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -73,6 +74,18 @@ class Organization(UUIDMixin, TimestampMixin, Base):
     )
     token_budget: Mapped[int] = mapped_column(Integer, default=100_000, server_default="100000")
     tokens_used: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # ------------------------------------------------------------------
+    # Public profile fields — editable by the owner via PATCH /orgs/mine,
+    # surfaced to candidates via GET /orgs/{org_id}/public. All nullable —
+    # an org with none of these filled in should just render an empty
+    # state on the public page, never a validation error.
+    # ------------------------------------------------------------------
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    website: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    industry: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    company_size: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    logo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     # Relationships
     members: Mapped[List["OrgMember"]] = relationship(back_populates="organization", lazy="select")
