@@ -26,7 +26,6 @@ import {
   Input,
   SlideOver,
   StatusBadge,
-  MatchScoreRing,
   useToast,
 } from "@/components/ui";
 
@@ -53,6 +52,14 @@ const ALL_CATEGORIES = [
   "other",
 ];
 
+const JOB_TYPES: { value: string; label: string }[] = [
+  { value: "full_time", label: "Full-time" },
+  { value: "part_time", label: "Part-time" },
+  { value: "contract", label: "Contract" },
+  { value: "internship", label: "Internship" },
+];
+const JOB_TYPE_LABELS: Record<string, string> = Object.fromEntries(JOB_TYPES.map((t) => [t.value, t.label]));
+
 interface Job {
   id: string;
   org_id: string;
@@ -62,10 +69,12 @@ interface Job {
   location: string | null;
   work_mode: string | null;
   job_level: string | null;
+  job_type: string | null;
   hiring_count: number;
   salary_min: number | null;
   salary_max: number | null;
   org_name: string | null;
+  logo_url: string | null;
   categories: string[] | null;
   scenario_enabled: boolean;
   role_summary: string | null;
@@ -120,6 +129,7 @@ interface Filters {
   location: string;
   salary_min: string;
   salary_max: string;
+  job_type: string[];
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -128,6 +138,7 @@ const EMPTY_FILTERS: Filters = {
   location: "",
   salary_min: "",
   salary_max: "",
+  job_type: [],
 };
 
 const SALARY_BANDS: { label: string; min?: number; max?: number }[] = [
@@ -194,6 +205,13 @@ function FilterPanelContent({
     });
   };
 
+  const toggleJobType = (value: string) => {
+    const next = filters.job_type.includes(value)
+      ? filters.job_type.filter((t) => t !== value)
+      : [...filters.job_type, value];
+    onChange({ ...filters, job_type: next });
+  };
+
   const filteredCategories = ALL_CATEGORIES.filter((c) => c.toLowerCase().includes(catQuery.toLowerCase()));
 
   const toggleCategory = (cat: string) => {
@@ -205,6 +223,28 @@ function FilterPanelContent({
 
   return (
     <div className="space-y-6">
+      <div>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job type</p>
+        <div className="flex flex-wrap gap-2">
+          {JOB_TYPES.map((jt) => {
+            const active = filters.job_type.includes(jt.value);
+            return (
+              <button
+                key={jt.value}
+                onClick={() => toggleJobType(jt.value)}
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-primary/40"
+                }`}
+              >
+                {jt.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Location</p>
         <Input placeholder="City or remote" value={locDraft} onChange={(e) => commitLocation(e.target.value)} />
@@ -300,6 +340,18 @@ function FilterChip({ children, onRemove }: { children: React.ReactNode; onRemov
 // without a backend behind it).
 // ---------------------------------------------------------------------------
 
+// Fit score = average of match_score across every application that has a
+// computed match_score (i.e. embeddings finished on both sides). match_score
+// itself is cosine similarity between the resume's embedding and the job's
+// JD embedding, adjusted by services/matching.py's cross-domain penalty —
+// this card just averages whatever the backend already computed per
+// application, it doesn't run any scoring of its own.
+function fitScoreColor(pct: number) {
+  if (pct >= 0.7) return "text-success";
+  if (pct >= 0.4) return "text-warning";
+  return "text-danger";
+}
+
 function FitSnapshotCard({ overview, applications }: { overview: Overview | null; applications: Application[] }) {
   const scored = applications.filter((a) => a.match_score != null);
   const avgMatch = scored.length ? scored.reduce((sum, a) => sum + (a.match_score ?? 0), 0) / scored.length : null;
@@ -314,8 +366,10 @@ function FitSnapshotCard({ overview, applications }: { overview: Overview | null
       </div>
 
       {avgMatch != null ? (
-        <div className="flex items-center gap-4">
-          <MatchScoreRing score={avgMatch} size="md" />
+        <div className="flex items-center gap-3">
+          <span className={`shrink-0 text-3xl font-bold tabular-nums ${fitScoreColor(avgMatch)}`}>
+            {Math.round(avgMatch * 100)}%
+          </span>
           <p className="text-xs leading-relaxed text-muted-foreground">
             Average match across {scored.length} scored application{scored.length !== 1 ? "s" : ""}.
           </p>
@@ -434,6 +488,7 @@ function JobFeed() {
   const [showFilters, setShowFilters] = useState(false);
   const [resumeDropdownOpen, setResumeDropdownOpen] = useState(false);
   const resumeDropdownRef = useRef<HTMLDivElement>(null);
+  const [isMac, setIsMac] = useState(false);
 
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
@@ -448,6 +503,10 @@ function JobFeed() {
   const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const requestIdRef = useRef(0);
+
+  useEffect(() => {
+    setIsMac(typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC"));
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -466,12 +525,13 @@ function JobFeed() {
     })();
   }, []);
 
-  // "/" focuses search, GitHub-style — a real shortcut, not a decorative hint.
+  // Ctrl+K / Cmd+K focuses search — the standard cross-app shortcut, unlike
+  // the previous "/" binding which only made sense compared to no shortcut
+  // at all.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key !== "/" || e.metaKey || e.ctrlKey || e.altKey) return;
-      const tag = (document.activeElement as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      const isShortcut = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k";
+      if (!isShortcut) return;
       e.preventDefault();
       searchInputRef.current?.focus();
     };
@@ -497,6 +557,7 @@ function JobFeed() {
     if (f.salary_min) params.set("salary_min", f.salary_min);
     if (f.salary_max) params.set("salary_max", f.salary_max);
     for (const c of f.categories) params.append("categories", c);
+    for (const t of f.job_type) params.append("job_type", t);
     if (cursor) params.set("cursor", cursor);
     const qs = params.toString();
     return qs ? `?${qs}` : "";
@@ -662,14 +723,23 @@ function JobFeed() {
   );
   const categoriesAreDefault =
     JSON.stringify([...filters.categories].sort()) === JSON.stringify([...defaultCategories].sort());
+  // Counts every currently-applied filter, including categories seeded
+  // from the resume by default — those are still actively narrowing the
+  // feed, so hiding them from the count made "Filters" look inactive even
+  // when it wasn't.
   const activeFilterCount =
     (filters.location ? 1 : 0) +
-    (filters.salary_min ? 1 : 0) +
-    (filters.salary_max ? 1 : 0) +
-    (categoriesAreDefault ? 0 : filters.categories.length);
-  const hasActiveChips = Boolean(filters.location || filters.salary_min || filters.salary_max || !categoriesAreDefault);
+    (filters.salary_min || filters.salary_max ? 1 : 0) +
+    filters.categories.length +
+    filters.job_type.length;
+  const hasActiveChips = Boolean(
+    filters.location ||
+      filters.salary_min ||
+      filters.salary_max ||
+      filters.categories.length > 0 ||
+      filters.job_type.length > 0,
+  );
   const activeSalaryLabel = findActiveSalaryBand(filters).label;
-
   return (
     <div className="w-full">
       {/* ─── Gradient hero header (matches dashboard style) ─── */}
@@ -697,8 +767,8 @@ function JobFeed() {
             <p className="mt-1.5 text-sm text-muted-foreground">Ranked by fit with your active resume</p>
           </div>
           <div className="animate-rise-in shrink-0" style={{ animationDelay: "100ms" }}>
-            <Link href="/candidate/resumes" className="text-sm text-muted-foreground transition-colors hover:text-foreground">
-              Manage resumes →
+            <Link href="/candidate/resumes">
+              <Button rightIcon={<ArrowRight size={15} />}>Manage resumes</Button>
             </Link>
           </div>
         </div>
@@ -709,16 +779,16 @@ function JobFeed() {
         <Card className="mb-3 p-3 sm:p-3.5">
           <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
             <div className="relative flex-1">
-              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground " />
               <Input
                 ref={searchInputRef}
                 value={searchDraft}
                 onChange={(e) => setSearchDraft(e.target.value)}
-                placeholder="Search by job title or company…"
-                className="pl-8 pr-9"
+                placeholder="Search title, company, or type (e.g. intern)…"
+                className="pl-8 pr-16"
               />
-              <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-block">
-                /
+              <kbd className="pointer-events-none absolute right-2.5 top-1/2 hidden -translate-y-1/2 items-center gap-0.5 rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground sm:inline-flex">
+                {isMac ? "⌘" : "Ctrl"}+K
               </kbd>
             </div>
 
@@ -796,17 +866,6 @@ function JobFeed() {
                 {activeSalaryLabel}
               </FilterChip>
             )}
-            {!categoriesAreDefault && (
-              <FilterChip onRemove={() => setFilters((f) => ({ ...f, categories: defaultCategories }))}>
-                Custom categories ({filters.categories.length})
-              </FilterChip>
-            )}
-            <button
-              onClick={resetAllFilters}
-              className="text-xs font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline"
-            >
-              Clear all
-            </button>
           </div>
         )}
 
@@ -867,17 +926,17 @@ function JobFeed() {
                 </div>
                 <p className="text-sm font-semibold text-foreground">That's all for now</p>
                 <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-                  We add new roles regularly — check back soon, or widen your search to see more.
+                  We add new jobs regularly, check back soon, or widen your search to see more.
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <Button size="sm" variant="outline" onClick={resetAllFilters}>
+                      Reset to profile
+                  </Button>
                   {hasActiveChips && (
-                    <Button size="sm" variant="outline" onClick={resetAllFilters}>
-                      Clear filters
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={() => setFilters((f) => ({ ...f, categories: [] }))}>
+                      <Button size="sm" variant="outline" onClick={() => setFilters((f) => ({ ...f, categories: [] }))}>
                     Browse all categories
                   </Button>
+                  )}
                 </div>
               </div>
             )}

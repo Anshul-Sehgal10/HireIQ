@@ -36,6 +36,11 @@ class ResumeVersion(UUIDMixin, Base):
     - s3_key points to the raw file in S3/R2 (PDF or DOCX).
     - embedding is the 1536-dim vector for this specific version.
     - version_number increments per candidate (1, 2, 3, …).
+    - file_size_bytes / content_type are populated in
+      resume_processing.process_resume_extraction — the raw bytes and MIME
+      type are only known once the file is actually read from storage
+      (presigned uploads never pass through the backend), so these stay
+      null until the first extraction attempt runs.
     """
 
     __tablename__ = "resume_versions"
@@ -52,7 +57,10 @@ class ResumeVersion(UUIDMixin, Base):
     parsed_data: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     categories: Mapped[Optional[list[str]]] = mapped_column(ARRAY(String(50)), nullable=True)
     label: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    
+
+    file_size_bytes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    content_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
     # Candidate-facing soft delete. The row (and file) survives — an
     # Application.resume_version_id may still reference it, and the
     # employer must always be able to resolve "what did they apply with".

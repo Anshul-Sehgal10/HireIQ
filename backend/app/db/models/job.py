@@ -59,6 +59,18 @@ class JobLevel(str, enum.Enum):
     MANAGER = "manager"
 
 
+class JobType(str, enum.Enum):
+    """
+    Employment arrangement — distinct from JobLevel (which is seniority).
+    A role can be e.g. "internship" + "intern" level, or "full_time" +
+    "senior" level — the two are independent axes.
+    """
+    FULL_TIME = "full_time"
+    PART_TIME = "part_time"
+    CONTRACT = "contract"
+    INTERNSHIP = "internship"
+
+
 class JobPosting(UUIDMixin, TimestampMixin, Base):
     """
     A role that an organisation wants to fill.
@@ -72,6 +84,9 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
     - scenario_enabled lets employers opt individual postings into the
       Behavioral Scenario Engine without affecting others.
     - hiring_count is the target headcount; used in employer analytics.
+    - job_type (nullable) is the employment arrangement (full-time,
+      part-time, contract, internship) — filterable on the candidate feed
+      and free-text searchable (e.g. "intern" matches "internship").
     """
 
     __tablename__ = "job_postings"
@@ -119,6 +134,16 @@ class JobPosting(UUIDMixin, TimestampMixin, Base):
         ),
         nullable=True,
     )
+
+    job_type: Mapped[Optional[JobType]] = mapped_column(
+        Enum(
+            JobType,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            name="job_type_enum",
+        ),
+        nullable=True,
+    )
+
     location: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     salary_min: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     salary_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

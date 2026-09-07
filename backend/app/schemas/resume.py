@@ -33,6 +33,8 @@ class ResumeVersionResponse(BaseModel):
     label: Optional[str] = None
     is_current: bool     # True if this is the candidate's active resume
     has_embedding: bool  # lets the UI show "retry embedding"
+    file_size_bytes: Optional[int] = None
+    content_type: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

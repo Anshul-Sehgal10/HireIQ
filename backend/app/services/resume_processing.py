@@ -16,11 +16,21 @@ async def process_resume_extraction(
     Runs text extraction + structured extraction + embedding for a resume
     version, mutating it in place. Keeps the candidate profile's cached
     embedding/categories in sync if this version is their current one.
+
+    file_size_bytes/content_type are set as soon as the raw bytes are read
+    from storage — regardless of whether extraction/embedding succeeds
+    afterward — since that's the only point in the whole upload flow where
+    the backend actually sees the file (presigned uploads go straight from
+    the browser to S3/R2/local disk, never through this server).
+
     Returns True on success, False on failure (non-fatal to caller).
     """
     storage = get_storage()
     try:
         file_bytes, content_type = storage.read_file(rv.s3_key)
+        rv.file_size_bytes = len(file_bytes)
+        rv.content_type = content_type
+
         raw_text = extract_text(file_bytes, content_type)
         if not raw_text.strip():
             logger.warning(f"Resume {rv.id}: extracted text is empty")

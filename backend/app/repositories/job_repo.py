@@ -1,9 +1,10 @@
 import uuid
 from typing import Optional, List
 from sqlalchemy import select, or_, and_, func
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import contains_eager
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models.job import JobPosting, JobStatus
+from app.db.models.job import JobPosting, JobStatus, JobType
+from app.db.models.organization import Organization
 from app.core.pagination import decode_cursor
 
 
@@ -29,6 +30,19 @@ async def list_jobs_by_org(db: AsyncSession, org_id: uuid.UUID) -> List[JobPosti
     return list(result.scalars().all())
 
 
+# Labels used only for free-text search matching (e.g. "intern" should
+# surface postings with job_type=internship even though the substring
+# "intern" never appears in the enum's raw value the same way). Kept
+# separate from any frontend-facing label map — this one only needs to be
+# forgiving for search, not pretty for display.
+JOB_TYPE_SEARCH_LABELS: dict[JobType, str] = {
+    JobType.FULL_TIME: "full time",
+    JobType.PART_TIME: "part time",
+    JobType.CONTRACT: "contract",
+    JobType.INTERNSHIP: "internship",
+}
+
+
 async def list_published_jobs(
     db: AsyncSession,
     categories: Optional[List[str]] = None,
@@ -38,6 +52,7 @@ async def list_published_jobs(
     location: Optional[str] = None,
     salary_min: Optional[int] = None,
     salary_max: Optional[int] = None,
+    job_type: Optional[List[str]] = None,
 ) -> tuple[List[JobPosting], bool]:
     """
     Returns (jobs, has_more). Fetches limit+1 rows to cheaply detect a next
@@ -47,8 +62,18 @@ async def list_published_jobs(
     in — there is no server-side fallback to a candidate's resume categories.
     The caller (the /jobs/feed route) decides what "no categories passed"
     means; this function just applies whatever it's given.
+
+    The organisation is always joined + eagerly populated (contains_eager)
+    since the feed response needs org_name/logo_url for every job, and this
+    same join is what lets `q` search by company name — one join serves
+    both purposes instead of a separate N+1 fan-out.
     """
-    query = select(JobPosting).where(JobPosting.status == JobStatus.PUBLISHED)
+    query = (
+        select(JobPosting)
+        .join(Organization, Organization.id == JobPosting.org_id)
+        .options(contains_eager(JobPosting.organization))
+        .where(JobPosting.status == JobStatus.PUBLISHED)
+    )
 
     if categories:
         query = query.where(
@@ -58,11 +83,28 @@ async def list_published_jobs(
             )
         )
 
+    if job_type:
+        valid_type_values = {t.value for t in JobType}
+        selected_types = [t for t in job_type if t in valid_type_values]
+        if selected_types:
+            query = query.where(JobPosting.job_type.in_(selected_types))
+
     if q:
-        like = f"%{q.strip()}%"
-        query = query.where(
-            or_(JobPosting.title.ilike(like), JobPosting.description.ilike(like))
-        )
+        stripped = q.strip()
+        like = f"%{stripped}%"
+        matched_types = [
+            jt.value
+            for jt, label in JOB_TYPE_SEARCH_LABELS.items()
+            if stripped.lower() in label or stripped.lower() in jt.value.lower()
+        ]
+        q_conditions = [
+            JobPosting.title.ilike(like),
+            JobPosting.description.ilike(like),
+            Organization.name.ilike(like),
+        ]
+        if matched_types:
+            q_conditions.append(JobPosting.job_type.in_(matched_types))
+        query = query.where(or_(*q_conditions))
 
     if location:
         query = query.where(JobPosting.location.ilike(f"%{location.strip()}%"))
@@ -148,6 +190,7 @@ async def close_job(db: AsyncSession, job: JobPosting) -> JobPosting:
 
 
 async def get_job_with_org(db: AsyncSession, job_id: uuid.UUID) -> Optional[JobPosting]:
+    from sqlalchemy.orm import joinedload
     result = await db.execute(
         select(JobPosting)
         .options(joinedload(JobPosting.organization))

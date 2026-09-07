@@ -2,13 +2,14 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional, List
 from pydantic import BaseModel, Field
-from app.db.models.job import JobStatus, WorkMode, JobLevel
+from app.db.models.job import JobStatus, WorkMode, JobLevel, JobType
 
 class JobCreate(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=50)
     work_mode: Optional[WorkMode] = None
     job_level: Optional[JobLevel] = None
+    job_type: Optional[JobType] = None
     location: Optional[str] = None
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
@@ -22,6 +23,7 @@ class JobUpdate(BaseModel):
     description: Optional[str] = None
     work_mode: Optional[WorkMode] = None
     job_level: Optional[JobLevel] = None
+    job_type: Optional[JobType] = None
     location: Optional[str] = None
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
@@ -38,6 +40,7 @@ class JobResponse(BaseModel):
     status: JobStatus
     work_mode: Optional[WorkMode]
     job_level: Optional[JobLevel]
+    job_type: Optional[JobType] = None
     location: Optional[str]
     salary_min: Optional[int]
     salary_max: Optional[int]
@@ -47,6 +50,7 @@ class JobResponse(BaseModel):
     categories: Optional[list[str]] = None
     scenario_score_threshold: float
     org_name: Optional[str] = None
+    logo_url: Optional[str] = None
     role_summary: Optional[str] = None
     applicant_count: Optional[int] = None
     # Exposed for "Posted Xd ago" on the candidate job feed — was already

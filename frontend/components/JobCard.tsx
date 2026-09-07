@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowUpRight, Briefcase, Building2, ChevronRight, Clock, MapPin, Sparkles } from "lucide-react";
+import { ArrowUpRight, Briefcase, Building2, ChevronRight, Clock, MapPin, Sparkles, Timer } from "lucide-react";
 import { Card, CardContent, StatusBadge } from "@/components/ui";
 
 interface JobCardJob {
@@ -13,9 +13,11 @@ interface JobCardJob {
   location: string | null;
   work_mode: string | null;
   job_level: string | null;
+  job_type?: string | null;
   salary_min: number | null;
   salary_max: number | null;
   org_name?: string | null;
+  logo_url?: string | null;
   categories: string[] | null;
   scenario_enabled: boolean;
   created_at?: string | null;
@@ -27,6 +29,13 @@ interface JobCardProps {
   applicationStatus?: string;
   onClick: () => void;
 }
+
+const JOB_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
+  internship: "Internship",
+};
 
 function formatSalary(min: number | null, max: number | null) {
   const fmt = (n: number) => (n >= 100000 ? `₹${(n / 100000).toFixed(n % 100000 === 0 ? 0 : 1)}L` : `₹${n.toLocaleString()}`);
@@ -81,6 +90,15 @@ function MetaPill({
   );
 }
 
+function OrgLogo({ job }: { job: JobCardJob }) {
+  return job.logo_url ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={job.logo_url} alt={job.org_name ?? ""} className="h-full w-full object-cover" />
+  ) : (
+    <>{orgInitials(job.org_name)}</>
+  );
+}
+
 export default function JobCard({ job, applied, applicationStatus, onClick }: JobCardProps) {
   const salary = formatSalary(job.salary_min, job.salary_max);
   const summary = job.role_summary?.trim() || job.description;
@@ -90,20 +108,23 @@ export default function JobCard({ job, applied, applicationStatus, onClick }: Jo
     <Card interactive onClick={onClick} className="group flex h-full flex-col p-4">
       <CardContent className="flex h-full flex-col p-0">
         <div className="flex-1 space-y-3">
-          {/* Logo + title/company + status */}
+          {/* Logo + title/company. Only a small fixed-width arrow icon sits
+              on the right here — application status moved out of this row
+              entirely (see below) so a long status label never squeezes
+              the title. Title gets 2 lines via line-clamp before truncating. */}
           <div className="flex items-start gap-3">
             {job.org_id ? (
               <Link
                 href={`/candidate/organizations/${job.org_id}`}
                 onClick={(e) => e.stopPropagation()}
                 title={job.org_name ?? undefined}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
+                className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-xs font-bold text-primary transition-colors hover:bg-primary/20"
               >
-                {orgInitials(job.org_name)}
+                <OrgLogo job={job} />
               </Link>
             ) : (
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-xs font-bold text-primary">
-                {orgInitials(job.org_name)}
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-primary/10 text-xs font-bold text-primary">
+                <OrgLogo job={job} />
               </span>
             )}
 
@@ -112,20 +133,21 @@ export default function JobCard({ job, applied, applicationStatus, onClick }: Jo
               {job.org_name && <p className="mt-0.5 truncate text-xs font-medium text-muted-foreground">{job.org_name}</p>}
             </div>
 
-            {applied ? (
-              <StatusBadge status={applicationStatus ?? "pending"} className="shrink-0" />
-            ) : (
-              <ArrowUpRight
-                size={15}
-                className="mt-1 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-primary"
-              />
-            )}
+            <ArrowUpRight
+              size={15}
+              className="mt-1 shrink-0 text-muted-foreground/30 transition-colors group-hover:text-primary"
+            />
           </div>
 
-          {salary && (
-            <span className="inline-flex items-center rounded-md bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-foreground">
-              {salary}
-            </span>
+          {(applied || salary) && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {applied && <StatusBadge status={applicationStatus ?? "pending"} />}
+              {salary && (
+                <span className="inline-flex items-center rounded-md bg-success-bg px-2 py-0.5 text-xs font-semibold text-success-foreground">
+                  {salary}
+                </span>
+              )}
+            </div>
           )}
 
           {summary && <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">{summary}</p>}
@@ -136,6 +158,9 @@ export default function JobCard({ job, applied, applicationStatus, onClick }: Jo
               <MetaPill icon={Building2} tone="primary">
                 <span className="capitalize">{job.work_mode}</span>
               </MetaPill>
+            )}
+            {job.job_type && (
+              <MetaPill icon={Timer}>{JOB_TYPE_LABELS[job.job_type] ?? job.job_type.replace(/_/g, " ")}</MetaPill>
             )}
             {job.job_level && (
               <MetaPill icon={Briefcase} tone="warning">

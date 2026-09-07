@@ -118,9 +118,13 @@ async def confirm_upload(
         )
 
     from app.services.resume_processing import process_resume_extraction
-    if await process_resume_extraction(rv, profile):
-        await db.commit()
-        await db.refresh(rv)
+    # Always commit afterward, whether or not extraction/embedding
+    # succeeded — file_size_bytes/content_type are set as a side effect of
+    # simply reading the file, so they should persist even on an
+    # extraction failure (e.g. scanned PDF with no extractable text).
+    await process_resume_extraction(rv, profile)
+    await db.commit()
+    await db.refresh(rv)
 
     return ResumeVersionResponse(
         id=rv.id, 
@@ -131,6 +135,8 @@ async def confirm_upload(
         label=rv.label, 
         is_current=(rv.id == profile.current_resume_version_id),
         has_embedding=rv.embedding is not None,
+        file_size_bytes=rv.file_size_bytes,
+        content_type=rv.content_type,
     )
 
 # ---------------------------------------------------------------------------
@@ -149,14 +155,16 @@ async def list_versions(
 
     return [
         ResumeVersionResponse(
-            id=rv.id, 
-            candidate_id=rv.candidate_id, 
+            id=rv.id,
+            candidate_id=rv.candidate_id,
             s3_key=rv.s3_key,
-            version_number=rv.version_number, 
+            version_number=rv.version_number,
             label=rv.label,
-            created_at=rv.created_at, # type: ignore
+            created_at=rv.created_at,  # type: ignore
             is_current=(rv.id == current_id),
             has_embedding=rv.embedding is not None,
+            file_size_bytes=rv.file_size_bytes,
+            content_type=rv.content_type,
         )
         for rv in versions
     ]
@@ -201,6 +209,8 @@ async def rename(
         created_at=rv.created_at, # type: ignore
         is_current=(rv.id == profile.current_resume_version_id),
         has_embedding=rv.embedding is not None,
+        file_size_bytes=rv.file_size_bytes,
+        content_type=rv.content_type,
     )
 
 
@@ -237,6 +247,8 @@ async def reprocess(
         created_at=rv.created_at, # type: ignore
         is_current=(rv.id == profile.current_resume_version_id),
         has_embedding=rv.embedding is not None,
+        file_size_bytes=rv.file_size_bytes,
+        content_type=rv.content_type,
     )
 
 @router.post("/{resume_version_id}/set-current", response_model=ResumeVersionResponse)
@@ -260,6 +272,8 @@ async def set_current(
         created_at=rv.created_at, # type: ignore 
         is_current=True,
         has_embedding=rv.embedding is not None,
+        file_size_bytes=rv.file_size_bytes,
+        content_type=rv.content_type,
     )
 
 

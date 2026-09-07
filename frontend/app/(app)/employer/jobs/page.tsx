@@ -20,6 +20,13 @@ import {
   useToast,
 } from "@/components/ui";
 
+const JOB_TYPE_LABELS: Record<string, string> = {
+  full_time: "Full-time",
+  part_time: "Part-time",
+  contract: "Contract",
+  internship: "Internship",
+};
+
 interface Job {
   id: string;
   title: string;
@@ -27,6 +34,7 @@ interface Job {
   location: string | null;
   work_mode: string | null;
   job_level: string | null;
+  job_type: string | null;
   hiring_count: number;
   scenario_enabled: boolean;
   applicant_count?: number;
@@ -306,7 +314,14 @@ function JobsContent() {
                           <span className="font-medium capitalize text-primary">
                             {job.job_level} level
                           </span>
-                          <span className="text-border">·</span>
+                          {job.job_type && (
+                            <>
+                              <span className="text-border">·</span>
+                              <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
+                                {JOB_TYPE_LABELS[job.job_type] ?? job.job_type.replace(/_/g, " ")}
+                              </span>
+                            </>
+                          )}
                           <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
                             {job.hiring_count} open position
                             {job.hiring_count !== 1 ? "s" : ""}
@@ -384,6 +399,7 @@ function JobForm({
     location: "",
     work_mode: "",
     job_level: "",
+    job_type: "",
     hiring_count: 1,
     salary_min: "",
     salary_max: "",
@@ -478,7 +494,7 @@ function JobForm({
             />
           </Field>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
             <Field label="Location" htmlFor="location">
               <Input
                 id="location"
@@ -497,7 +513,6 @@ function JobForm({
                   setForm((p) => ({ ...p, work_mode: e.target.value }))
                 }
               >
-                <option value="">Select</option>
                 <option value="remote">Remote</option>
                 <option value="onsite">Onsite</option>
                 <option value="hybrid">Hybrid</option>
@@ -511,11 +526,24 @@ function JobForm({
                   setForm((p) => ({ ...p, job_level: e.target.value }))
                 }
               >
-                <option value="">Select</option>
                 <option value="fresher">Fresher</option>
                 <option value="junior">Junior</option>
                 <option value="mid">Mid</option>
                 <option value="senior">Senior</option>
+              </Select>
+            </Field>
+            <Field label="Job type" htmlFor="job_type">
+              <Select
+                id="job_type"
+                value={form.job_type}
+                onChange={(e) =>
+                  setForm((p) => ({ ...p, job_type: e.target.value }))
+                }
+              >
+                <option value="full_time">Full-time</option>
+                <option value="part_time">Part-time</option>
+                <option value="contract">Contract</option>
+                <option value="internship">Internship</option>
               </Select>
             </Field>
             <Field label="Headcount" htmlFor="hiring_count">

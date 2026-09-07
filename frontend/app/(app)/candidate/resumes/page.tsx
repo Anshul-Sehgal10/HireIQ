@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Upload } from "lucide-react";
 import { RoleGuard } from "@/components/RoleGuard";
 import { apiFetch } from "@/lib/api";
 import ResumeUpload from "@/components/ResumeUpload";
 import ResumeCard from "@/components/ResumeCard";
 import ResumeDetailModal from "@/components/ResumeDetailModal";
-import { PageHeader, Card, Button, SkeletonCard, useToast } from "@/components/ui";
+import { PageHeader, Card, SkeletonCard, useToast } from "@/components/ui";
 
 interface ResumeVersion {
   id: string;
@@ -17,6 +16,8 @@ interface ResumeVersion {
   created_at: string;
   is_current: boolean;
   has_embedding: boolean;
+  file_size_bytes?: number | null;
+  content_type?: string | null;
 }
 
 export default function ResumesPage() {
@@ -32,7 +33,6 @@ function ResumesContent() {
   const [versions, setVersions] = useState<ResumeVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showUpload, setShowUpload] = useState(false);
   const [selected, setSelected] = useState<ResumeVersion | null>(null);
 
   const load = async () => {
@@ -43,7 +43,6 @@ function ResumesContent() {
       if (!res.ok) throw new Error(data.detail ?? "Failed to load resumes");
       data.sort((a: ResumeVersion, b: ResumeVersion) => a.version_number - b.version_number);
       setVersions(Array.isArray(data) ? data : []);
-      console.log("Loaded resumes:", data);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -71,16 +70,34 @@ function ResumesContent() {
     toast({ title: "Resume deleted", variant: "success" });
   };
 
+  const quickSetActive = async (id: string) => {
+    try {
+      const res = await apiFetch(`/resumes/${id}/set-current`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to activate resume");
+      handleUpdated(id, { is_current: true });
+      toast({ title: "Set as active resume", variant: "success" });
+    } catch (e: any) {
+      toast({ title: "Failed to activate", description: e.message, variant: "error" });
+    }
+  };
+
+  const quickDownload = async (id: string) => {
+    try {
+      const res = await apiFetch(`/resumes/${id}/download-url`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail ?? "Failed to get download link");
+      window.open(data.download_url, "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      toast({ title: "Failed to download", description: e.message, variant: "error" });
+    }
+  };
+
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="mx-auto max-w-6xl">
       <PageHeader
         title="My resumes"
         description="Upload versions, pick your active resume, and see how each one was parsed"
-        actions={
-          <Button size="sm" onClick={() => setShowUpload((v) => !v)}>
-            {showUpload ? "Cancel" : "Upload new"}
-          </Button>
-        }
       />
 
       <div className="space-y-6 p-6">
@@ -90,35 +107,25 @@ function ResumesContent() {
           </div>
         )}
 
-        {showUpload && (
-          <Card className="p-5">
-            <ResumeUpload onUploaded={() => { setShowUpload(false); load(); }} />
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <Card className="flex h-full flex-col justify-center border-2 border-dashed border-border bg-muted/20 p-5">
+            <ResumeUpload onUploaded={() => load()} />
           </Card>
-        )}
 
-        {loading && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
-          </div>
-        )}
+          {loading &&
+            Array.from({ length: 2 }).map((_, i) => <SkeletonCard key={i} />)}
 
-        {!loading && versions.length === 0 && !showUpload && (
-          <Card className="p-10 text-center">
-            <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-              <Upload size={18} />
-            </div>
-            <p className="mb-3 text-sm text-muted-foreground">No resumes uploaded yet.</p>
-            <Button size="sm" onClick={() => setShowUpload(true)}>Upload your first resume</Button>
-          </Card>
-        )}
-
-        {!loading && versions.length > 0 && (
-          <div className="grid gap-4 sm:grid-cols-2">
-            {versions.map((rv) => (
-              <ResumeCard key={rv.id} version={rv} onClick={() => setSelected(rv)} />
+          {!loading &&
+            versions.map((rv) => (
+              <ResumeCard
+                key={rv.id}
+                version={rv}
+                onClick={() => setSelected(rv)}
+                onSetActive={() => quickSetActive(rv.id)}
+                onDownload={() => quickDownload(rv.id)}
+              />
             ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {selected && (

@@ -59,6 +59,7 @@ async def list_mine(
         JobResponse(
             id=job.id, org_id=job.org_id, title=job.title, description=job.description,
             status=job.status, work_mode=job.work_mode, job_level=job.job_level,
+            job_type=job.job_type,
             location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
             hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
             match_threshold=job.match_threshold, categories=job.categories,
@@ -87,13 +88,18 @@ async def feed(
     location: Optional[str] = Query(default=None, max_length=255),
     salary_min: Optional[int] = Query(default=None, ge=0),
     salary_max: Optional[int] = Query(default=None, ge=0),
+    job_type: Optional[List[str]] = Query(default=None),
 ):
     """
-    Paginated published-job feed. Category/location/salary/text filters are
-    driven entirely by the query params — the frontend is responsible for
-    seeding `categories` from the candidate's active resume on first load
-    (via /candidates/me/overview) and updating it whenever that resume
-    changes; this route applies whatever it's given with no fallback.
+    Paginated published-job feed. Category/location/salary/job_type/text
+    filters are driven entirely by the query params — the frontend is
+    responsible for seeding `categories` from the candidate's active resume
+    on first load (via /candidates/me/overview) and updating it whenever
+    that resume changes; this route applies whatever it's given with no
+    fallback.
+
+    `q` also matches company name and job type label (e.g. "intern" surfaces
+    internship postings) — see list_published_jobs for the matching logic.
     """
     result = await db.execute(
         select(CandidateProfile).where(CandidateProfile.user_id == user.id)
@@ -115,12 +121,34 @@ async def feed(
             location=location,
             salary_min=salary_min,
             salary_max=salary_max,
+            job_type=job_type,
         )
     except ValueError:
         raise HTTPException(400, "Invalid pagination cursor")
 
+    # Built manually (not passed straight to JobFeedResponse) because
+    # org_name/logo_url aren't real attributes on JobPosting — they come
+    # from the eagerly-loaded `organization` relationship, which
+    # from_attributes auto-serialization has no way to know to reach into.
+    job_responses = [
+        JobResponse(
+            id=job.id, org_id=job.org_id, title=job.title, description=job.description,
+            status=job.status, work_mode=job.work_mode, job_level=job.job_level,
+            job_type=job.job_type,
+            location=job.location, salary_min=job.salary_min, salary_max=job.salary_max,
+            hiring_count=job.hiring_count, scenario_enabled=job.scenario_enabled,
+            match_threshold=job.match_threshold, categories=job.categories,
+            scenario_score_threshold=job.scenario_score_threshold,
+            role_summary=job.role_summary,
+            org_name=job.organization.name if job.organization else None,
+            logo_url=job.organization.logo_url if job.organization else None,
+            created_at=job.created_at,
+        )
+        for job in jobs
+    ]
+
     next_cursor = encode_cursor(jobs[-1].created_at, jobs[-1].id) if has_more and jobs else None
-    return JobFeedResponse(jobs=jobs, next_cursor=next_cursor, has_more=has_more)  # type: ignore
+    return JobFeedResponse(jobs=job_responses, next_cursor=next_cursor, has_more=has_more)
 
 
 @router.get("/{job_id}", response_model=JobDetailResponse)
@@ -140,6 +168,7 @@ async def get_one(
         status=job.status, 
         work_mode=job.work_mode, 
         job_level=job.job_level,
+        job_type=job.job_type,
         location=job.location, 
         salary_min=job.salary_min, 
         salary_max=job.salary_max,
@@ -151,6 +180,7 @@ async def get_one(
         org_name=org.name if org else "Unknown",
         org_domain=org.domain if org else None,
         org_verification_status=org.verification_status.value if org else "pending",
+        logo_url=org.logo_url if org else None,
         applicant_count=await count_applications_by_job(db, job.id),
         created_at=job.created_at,
     )

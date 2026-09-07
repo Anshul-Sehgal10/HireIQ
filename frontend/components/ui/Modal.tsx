@@ -12,10 +12,10 @@ interface ModalProps {
   description?: string;
   children?: React.ReactNode;
   footer?: React.ReactNode;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "lg" | "xl";
 }
 
-const SIZE_CLASSES = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg" };
+const SIZE_CLASSES = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-3xl" };
 
 /** Centered modal — reserve for small/simple confirmations. Heavier content
  *  (job detail, applicant review, etc.) should use SlideOver instead. */

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useRef, useState, useEffect } from "react";
 import {
   ChevronLeft,
+  ChevronRight,
   LogOut,
   User,
   Settings,
@@ -51,12 +52,6 @@ function HireIQLogo({ size = 20 }: { size?: number }) {
   );
 }
 
-// Delta between expanded (248px) and collapsed (60px) sidebar widths — used
-// to slide the floating toggle button in lockstep with the aside's own
-// hover-triggered pop-out, since the outer wrapper's own width only
-// changes on `open` (pinned), never on hover alone.
-const EXPAND_DELTA_PX = 248 - 60;
-
 /* ── Sidebar ──────────────────────────────────────────────────────── */
 
 export default function Sidebar() {
@@ -65,7 +60,6 @@ export default function Sidebar() {
   const { user, logout } = useAuth();
   const { open, toggle } = useSidebar();
   const [menuOpen, setMenuOpen] = useState(false);
-  const [hovering, setHovering] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -82,18 +76,6 @@ export default function Sidebar() {
 
   const navItems = NAVIGATION[user.role] || [];
 
-  // `expanded` drives everything visual (labels, widths inside the aside).
-  // `open` alone drives the layout track below — hovering while collapsed
-  // never shifts the main content, it only lets the sidebar itself pop out
-  // and overlap it.
-  const expanded = open || hovering;
-
-  // The toggle button only needs to physically slide when it's a
-  // hover-only expansion (sidebar not pinned) — when pinned, the outer
-  // wrapper itself is already 248px wide so the button's default offset
-  // already lines up.
-  const buttonFollowsHoverExpansion = hovering && !open;
-
   return (
     <div
       className={cn(
@@ -103,45 +85,58 @@ export default function Sidebar() {
       )}
     >
       <aside
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => !menuOpen && setHovering(false)}
         className={cn(
           "absolute inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-card text-foreground",
-          "transition-[width,box-shadow] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
-          expanded ? "w-62" : "w-15",
-          hovering && !open && "shadow-2xl shadow-black/10",
+          "transition-[width] duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)]",
+          open ? "w-62" : "w-15",
         )}
       >
-        {/* Brand header */}
-        <div className="flex h-14 shrink-0 items-center px-3">
-          <Link
-            href={`/${user.role}/dashboard`}
-            className={cn(
-              "flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-muted",
-              !expanded && "mx-auto",
-            )}
-          >
-            <span
-              className={cn(
-                "flex shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground",
-                "shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]",
-                expanded ? "h-7 w-7" : "h-8 w-8",
-              )}
+        {/* Brand header — pinned open: logo + brand text on the left, a
+            collapse button on the right, both always visible. Collapsed:
+            just the logo, which swaps to an expand button on hover (pure
+            CSS via group-hover, no separate hover state needed) — this
+            replaces the old whole-sidebar hover-to-peek behavior, which
+            fought with intentional clicks near the edge. */}
+        <div className="flex h-14 shrink-0 items-center justify-between px-3">
+          {open ? (
+            <Link
+              href={`/${user.role}/dashboard`}
+              className="flex items-center gap-2.5 rounded-xl px-1.5 py-1.5 transition-colors hover:bg-muted"
             >
-              <HireIQLogo size={expanded ? 16 : 18} />
-            </span>
-            <span
-              className={cn(
-                "text-[15px] font-bold tracking-tight text-foreground",
-                "transition-[opacity,transform] duration-200 ease-out",
-                expanded
-                  ? "translate-x-0 opacity-100"
-                  : "pointer-events-none absolute -translate-x-2 opacity-0",
-              )}
+              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)]">
+                <HireIQLogo size={16} />
+              </span>
+              <span className="text-[15px] font-bold tracking-tight text-foreground">HireIQ</span>
+            </Link>
+          ) : (
+            <div className="group relative mx-auto flex h-8 w-8 shrink-0 items-center justify-center">
+              <Link
+                href={`/${user.role}/dashboard`}
+                aria-label="Go to dashboard"
+                className="absolute inset-0 flex items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_1px_3px_rgba(0,0,0,0.12),0_0_0_1px_rgba(0,0,0,0.04)] transition-opacity duration-150 group-hover:pointer-events-none group-hover:opacity-0"
+              >
+                <HireIQLogo size={18} />
+              </Link>
+              <button
+                type="button"
+                onClick={toggle}
+                aria-label="Expand sidebar"
+                className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg border border-border bg-card text-muted-foreground opacity-0 transition-opacity duration-150 hover:text-foreground group-hover:pointer-events-auto group-hover:opacity-100"
+              >
+                <ChevronRight size={15} />
+              </button>
+            </div>
+          )}
+
+          {open && (
+            <button
+              onClick={toggle}
+              aria-label="Collapse sidebar"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              HireIQ
-            </span>
-          </Link>
+              <ChevronLeft size={15} />
+            </button>
+          )}
         </div>
 
         {/* Navigation */}
@@ -151,7 +146,7 @@ export default function Sidebar() {
               "mb-1 px-2.5 pt-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]",
               "text-muted-foreground/50 select-none",
               "transition-[opacity,max-height] duration-200 ease-out",
-              expanded
+              open
                 ? "max-h-8 opacity-100"
                 : "max-h-0 overflow-hidden opacity-0",
             )}
@@ -169,10 +164,10 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  title={!expanded ? item.label : undefined}
+                  title={!open ? item.label : undefined}
                   className={cn(
                     "group relative flex items-center rounded-lg py-2.25 text-[13px] transition-colors duration-150",
-                    expanded ? "gap-3 px-2.5" : "justify-center px-0",
+                    open ? "gap-3 px-2.5" : "justify-center px-0",
                     active
                       ? "bg-primary/10 text-foreground font-semibold"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground font-medium",
@@ -203,7 +198,7 @@ export default function Sidebar() {
                     className={cn(
                       "truncate whitespace-nowrap",
                       "transition-[opacity,transform] duration-200 ease-out",
-                      expanded
+                      open
                         ? "translate-x-0 opacity-100"
                         : "pointer-events-none absolute -translate-x-2 opacity-0",
                     )}
@@ -286,20 +281,17 @@ export default function Sidebar() {
             </div>
           )}
 
-          {/* Row itself always stacks as a flex-row when expanded (pinned OR
-              hover) so the profile button + theme toggle sit side by side;
-              collapsed state stays a centered column with just the avatar. */}
           <div
             className={cn(
               "flex items-center",
-              expanded ? "flex-row gap-1" : "flex-col gap-2",
+              open ? "flex-row gap-1" : "flex-col gap-2",
             )}
           >
             <button
               onClick={() => setMenuOpen((v) => !v)}
               className={cn(
                 "flex min-w-0 items-center gap-2.5 rounded-lg transition-colors hover:bg-muted",
-                expanded
+                open
                   ? "flex-1 px-2 py-1.5 text-left"
                   : "justify-center p-1.5",
               )}
@@ -312,7 +304,7 @@ export default function Sidebar() {
                 className={cn(
                   "flex min-w-0 flex-1 flex-col items-start",
                   "transition-[opacity,transform] duration-200 ease-out",
-                  expanded
+                  open
                     ? "translate-x-0 opacity-100"
                     : "pointer-events-none absolute -translate-x-2 opacity-0",
                 )}
@@ -330,17 +322,14 @@ export default function Sidebar() {
                 className={cn(
                   "shrink-0 text-muted-foreground",
                   "transition-opacity duration-200",
-                  expanded
+                  open
                     ? "opacity-100"
                     : "pointer-events-none absolute opacity-0",
                 )}
               />
             </button>
 
-            {/* Only rendered when PINNED open — a hover-only expansion never
-                shows it, so it can't visually shift things as the pointer
-                enters/leaves. */}
-            {expanded && (
+            {open && (
               <div className="shrink-0">
                 <ThemeToggle />
               </div>
@@ -348,38 +337,6 @@ export default function Sidebar() {
           </div>
         </div>
       </aside>
-
-      {/* Floating collapse/expand handle — sibling of <aside>, so it has no
-          mouseenter/mouseleave of its own and hovering it can never
-          pre-trigger the sidebar's hover-expansion (click-to-pin stays a
-          single, immediate action).
-          Moved up to `top-4` so it now sits level with the header/logo row
-          instead of floating lower on the border next to the nav list —
-          reads as part of the header, not a stray control on the divider.
-          It still needs to visually track the aside's hover pop-out — the
-          outer wrapper's own width only changes on `open` (pinned), so
-          without this the button would sit frozen at the 60px-collapsed
-          edge while the aside visually expands out from under it. The
-          translateX below shifts it by the same 188px the aside expands
-          by, only while that expansion is hover-driven (not pinned). */}
-      <button
-        onClick={toggle}
-        aria-label={open ? "Collapse sidebar" : "Expand sidebar"}
-        style={{
-          transform: buttonFollowsHoverExpansion
-            ? `translateX(${EXPAND_DELTA_PX}px)`
-            : "translateX(0)",
-        }}
-        className="group absolute -right-3 top-4 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-primary text-primary-foreground shadow-sm transition-transform duration-300 ease-[cubic-bezier(0.25,0.1,0.25,1)] hover:bg-muted hover:text-foreground"
-      >
-        <ChevronLeft
-          size={13}
-          className={cn(
-            "transition-transform duration-300",
-            !open && "rotate-180",
-          )}
-        />
-      </button>
     </div>
   );
 }
